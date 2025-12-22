@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    container_name: stt-helpdesk-front
+    ports:
+      - "3009:80"
+    volumes:
+      # Opcional: Montar la config de apache para editar sin reconstruir
+      - ./my-vhost.conf:/usr/local/apache2/conf/extra/my-vhost.conf
+    
+    # Conectar a la misma red que el backend
+    networks:
+      - red-helpdesk
+
+networks:
+  red-helpdesk:
+    external: true
