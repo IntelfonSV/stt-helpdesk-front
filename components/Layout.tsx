@@ -62,7 +62,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout }) => {
             <div className="flex items-center gap-3 pl-6 border-l border-gray-200">
               <div className="text-right hidden md:block">
                 <p className="text-sm font-bold text-[#1e242b]">{user?.name}</p>
-                <p className="text-xs text-gray-500 font-medium">{user?.country?.country_name || 'País no disponible'} - {user?.area || 'Área no disponible'}</p>
+                <p className="text-xs text-gray-500 font-medium">{user?.country?.country_name || 'País no disponible'} - {user?.area?.name || 'Área no disponible'}</p>
               </div>
               <Avatar 
                 src={user?.avatar} 

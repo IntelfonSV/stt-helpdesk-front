@@ -35,7 +35,7 @@ import {
   Mail,
   Send,
 } from "lucide-react";
-import { User, UserRole, MAX_USERS, TicketArea } from "../types";
+import { User, UserRole, MAX_USERS, Category, Area, CreateCategoryRequest, UpdateCategoryRequest, CreateAreaRequest } from "../types";
 import { apiRequest } from "../lib/apiClient";
 import { log } from "console";
 import Swal from "sweetalert2";
@@ -172,14 +172,28 @@ export const AdminConfig: React.FC = () => {
     }
   };
 
-  // --- Areas Logic ---
+  // --- Categories and Areas Logic ---
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategory, setNewCategory] = useState("");
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editedCategory, setEditedCategory] = useState<UpdateCategoryRequest>({ nombre: "" });
   const [newArea, setNewArea] = useState("");
-
-  const [areas, setAreas] = useState<string[]>([]);
+  const [selectedCategoryForArea, setSelectedCategoryForArea] = useState<number | null>(null);
 
   // --- Countries Logic ---
   const [newCountry, setNewCountry] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
+
+  // Helper function to get all areas from all categories
+  const getAllAreas = () => {
+    const allAreas: { id: number; name: string }[] = [];
+    categories?.forEach(category => {
+      category.areas?.forEach(area => {
+        allAreas.push({ id: area.id, name: area.name });
+      });
+    });
+    return allAreas;
+  };
 
   // --- Users Logic ---
   const initialNewUser: Partial<User> = {
@@ -187,8 +201,7 @@ export const AdminConfig: React.FC = () => {
     email: "",
     role: "specialist",
     countryId: "",
-    area: "",
-    password: "tempPassword123",
+    area: "", // This will store area ID as string
     assignableTo: [],
     receivableFrom: [],
   };
@@ -215,20 +228,20 @@ export const AdminConfig: React.FC = () => {
         setLoading(true);
         setError("");
 
-        const [usersRes, areasRes, countriesRes] = await Promise.all([
+        const [usersRes, categoriesRes, countriesRes] = await Promise.all([
           apiRequest<User[]>("/users", "GET", { authToken: token }),
-          apiRequest<string[]>("/areas", "GET", { authToken: token }),
+          apiRequest<Category[]>("/categorias", "GET", { authToken: token }),
           apiRequest<string[]>("/countries", "GET", { authToken: token }),
         ]);
 
-        console.log("Countries:", countriesRes);
-
+        console.log("Categories API response:", categoriesRes);
         console.log("Users:", usersRes);
+        console.log("Token being used:", token);
         setUsers(usersRes);
-
-        setAreas(areasRes);
+        console.log("Categories:", categoriesRes)
+        setCategories(categoriesRes);
+        console.log("Countries:", countriesRes)
         setCountries(countriesRes);
-        console.log("Areas:", areasRes);
       } catch (e) {
         console.error("Error fetching data:", e);
         setError("Error al cargar datos del servidor.");
@@ -240,26 +253,151 @@ export const AdminConfig: React.FC = () => {
     fetchData();
   }, [token]);
 
-  const handleAddArea = () => {
-    if (newArea && !areas.includes(newArea)) {
-      console.log(`Adding new area: ${newArea}`);
-      apiRequest("/areas", "POST", {
+  // --- Category Management Functions ---
+  const handleAddCategory = async () => {
+    if (!newCategory.trim()) return;
+    
+    try {
+      const response = await apiRequest<Category>('/categorias', 'POST', {
         authToken: token,
-        body: { name: newArea },
-      })
-        .then(() => {
-          setAreas([...areas, newArea]);
-          setNewArea("");
-        })
-        .catch((err) => {
-          console.error("Error adding area:", err);
-          Swal.fire({ icon: "error", title: "Error al agregar el área" });
-        });
+        body: { nombre: newCategory.trim() } as CreateCategoryRequest,
+      });
+      setCategories([...categories, response]);
+      setNewCategory("");
+      Swal.fire({ icon: "success", title: "Categoría agregada" });
+    } catch (err: any) {
+      console.error("Error adding category:", err);
+      Swal.fire({ icon: "error", title: "Error al agregar la categoría" });
     }
   };
 
-  const handleDeleteArea = (a: string) => {
-    setAreas(areas.filter((area) => area !== a));
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setEditedCategory({ nombre: category.nombre });
+  };
+
+  const handleSaveEditCategory = async () => {
+    if (!editingCategory || !editedCategory.nombre.trim()) return;
+    
+    try {
+      const response = await apiRequest<Category>(`/categorias/${editingCategory.id}`, 'PUT', {
+        authToken: token,
+        body: editedCategory as any,
+      });
+      setCategories(categories.map(cat => cat.id === editingCategory.id ? response : cat));
+      setEditingCategory(null);
+      setEditedCategory({ nombre: "" });
+      Swal.fire({ icon: "success", title: "Categoría actualizada" });
+    } catch (err: any) {
+      console.error("Error updating category:", err);
+      Swal.fire({ icon: "error", title: "Error al actualizar la categoría" });
+    }
+  };
+
+  const handleDeleteCategory = async (category: Category) => {
+    Swal.fire({
+      title: `¿Eliminar categoría "${category.nombre}"?`,
+      text: "",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e51b24',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+       const response = await apiRequest(`/categorias/${category.id}`, 'DELETE', { authToken: token });
+        setCategories(categories.filter(cat => cat.id !== category.id));
+        Swal.fire({ icon: "success", title: "Categoría eliminada" });
+      } catch (err: any) {
+        console.error("Error deleting category:", err);
+        // Extraer el mensaje de error del JSON dentro del err.message
+        const messageStart = err.message.indexOf('{');
+        const errorJson = messageStart !== -1 ? err.message.substring(messageStart) : '{}';
+        const errorData = JSON.parse(errorJson);
+        Swal.fire({ 
+          icon: "error", 
+          title: "Error al eliminar la categoría", 
+          text: errorData.error || "Error desconocido" 
+        });
+      }
+    });
+  };
+
+  const handleCancelEditCategory = () => {
+    setEditingCategory(null);
+    setEditedCategory({ nombre: "" });
+  };
+
+  // --- Area Management Functions ---
+  const handleAddArea = async () => {
+    if (!newArea.trim() || selectedCategoryForArea === null) return;
+    
+    try {
+      await apiRequest('/areas', 'POST', {
+        authToken: token,
+        body: { 
+          name: newArea.trim(),
+          categoryId: selectedCategoryForArea 
+        } as any,
+      });
+      
+      // Refetch categories to get updated data with area IDs
+      const categoriesRes = await apiRequest<Category[]>('/categorias', 'GET', { authToken: token });
+      setCategories(categoriesRes);
+      
+      setNewArea("");
+      setSelectedCategoryForArea(null);
+      Swal.fire({ icon: "success", title: "Área agregada" });
+    } catch (err: any) {
+      console.error("Error adding area:", err);
+      Swal.fire({ icon: "error", title: "Error al agregar el área" });
+    }
+  };
+
+  const handleDeleteArea = async (area: any) => {
+    console.log("Deleting area:", area);
+    
+    // Always use the area ID
+    const areaId = area.id;
+    console.log("Using area ID:", areaId);
+    
+    if (!areaId) {
+      Swal.fire({ icon: "error", title: "Error: El área no tiene ID" });
+      return;
+    }
+    
+    Swal.fire({
+      title: `¿Eliminar área "${area.name || area}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e51b24',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+        const endpoint = `/areas/${areaId}`;
+        console.log("Making DELETE request to:", endpoint);
+        
+        await apiRequest(endpoint, 'DELETE', { 
+          authToken: token,
+        });
+        
+        // Update categories by removing the deleted area
+        setCategories(prevCategories => 
+          prevCategories.map(cat => ({
+            ...cat,
+            areas: cat.areas.filter(a => a.id !== areaId)
+          }))
+        );
+        
+        Swal.fire({ icon: "success", title: "Área eliminada" });
+      } catch (err: any) {
+        console.error("Error deleting area:", err);
+        Swal.fire({ icon: "error", title: "Error al eliminar el área" });
+      }
+    });
   };
 
   const handleAddUser = () => {
@@ -271,22 +409,20 @@ export const AdminConfig: React.FC = () => {
     }
     if (!newUser.name || !newUser.email) return;
 
-    const id = (Math.max(...users.map((u) => parseInt(u.id))) + 1).toString();
-    const createdUser: User = {
+    const userPayload = {
       name: newUser.name || "",
       email: newUser.email || "",
       role: newUser.role || "specialist",
-      password: newUser.password || "tempPassword123",
       countryId: newUser.countryId || "",
-      area: newUser.area || "",
-      avatar: `https://ui-avatars.com/api/?name=test&background=random`,
+      areaId: Number(newUser.area) || 0, // Convert area ID string to number
+      password: "tempPassword123", // Contraseña temporal requerida por el backend
       assignableTo: newUser.assignableTo || [],
       receivableFrom: newUser.receivableFrom || [],
     };
 
     apiRequest<CreateUserIdResponse>("/users", "POST", {
       authToken: token,
-      body: createdUser,
+      body: userPayload as any,
     })
       .then((res) => {
         Swal.fire({ icon: "success", title: "Usuario creado" });
@@ -319,21 +455,31 @@ export const AdminConfig: React.FC = () => {
     if (newCountry && !countries.includes(newCountry)) {
       apiRequest("/countries", "POST", {
         authToken: token,
-        body: { country_name: newCountry },
+        body: { country_name: newCountry.trim() } as any,
       })
         .then(() => {
           apiRequest<string[]>("/countries", "GET", { authToken: token })
             .then((res: string[]) => {
               setCountries(res);
+              Swal.fire({ icon: "success", title: "País agregado" });
             })
             .catch((err) => {
               console.error("Error fetching countries:", err);
+              Swal.fire({ icon: "error", title: "Error al actualizar la lista de países" });
             });
           setNewCountry("");
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error("Error adding country:", err);
-          Swal.fire({ icon: "error", title: "Error al agregar el país" });
+          // Extraer el mensaje de error del JSON dentro del err.message
+          const messageStart = err.message.indexOf('{');
+          const errorJson = messageStart !== -1 ? err.message.substring(messageStart) : '{}';
+          const errorData = JSON.parse(errorJson);
+          Swal.fire({ 
+            icon: "error", 
+            title: "Error al agregar el país", 
+            text: errorData.error || errorData.message || "Error desconocido" 
+          });
         });
     }
   };
@@ -346,12 +492,12 @@ export const AdminConfig: React.FC = () => {
     if (!newName || newName === country.country_name) return;
     apiRequest(`/countries/${country.id}`, "PUT", {
       authToken: token,
-      body: { country_name: newName },
+      body: { country_name: newName } as any,
     })
       .then(() => {
         setCountries(
           countries.map((c) =>
-            c.id === country.id ? { ...c, country_name: newName } : c
+            c === country.id ? newName : c
           )
         );
         // update users referencing the country
@@ -373,7 +519,10 @@ export const AdminConfig: React.FC = () => {
     }).then((result) => {
       if (!result.isConfirmed) return;
       apiRequest(`/countries/${c}`, "DELETE", { authToken: token })
-        .then(() => setCountries(countries.filter((co) => co.id !== c)))
+      .then(() => {
+        setCountries(countries.filter((country) => country !== c));
+        Swal.fire({ icon: "success", title: "País eliminado" });
+      })  
         .catch((err) => {
           console.error("Error deleting country:", err);
           Swal.fire({ icon: "error", title: "Error al eliminar el país" });
@@ -398,8 +547,8 @@ export const AdminConfig: React.FC = () => {
     const editedUserData = {
       name: editedUser.name || "",
       email: editedUser.email || "",
-      country: editedUser.country.id || "",
-      area: editedUser.area || "",
+      countryId: editedUser.country?.id || "",
+      areaId: Number(editedUser.area) || 0, // Convert area ID string to number
       role: editedUser.role || "",
       assignableTo: editedUser.assignableTo || [],
       receivableFrom: editedUser.receivableFrom || [],
@@ -495,7 +644,7 @@ export const AdminConfig: React.FC = () => {
               iconPosition="start"
             />
             <Tab
-              label="Áreas de Servicio"
+              label="Categorías y Áreas"
               icon={<Layers size={18} />}
               iconPosition="start"
             />
@@ -626,13 +775,13 @@ export const AdminConfig: React.FC = () => {
                   onChange={(e) =>
                     setNewUser({
                       ...newUser,
-                      area: e.target.value as TicketArea,
+                      area: e.target.value,
                     })
                   }
                 >
-                  {areas.map((a) => (
-                    <MenuItem key={a} value={a}>
-                      {a}
+                  {getAllAreas().map((area) => (
+                    <MenuItem key={area.id} value={area.id.toString()}>
+                      {area.name}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -783,7 +932,7 @@ export const AdminConfig: React.FC = () => {
                           className="h-5 text-[10px]"
                         />
                         <Chip
-                          label={user.area}
+                          label={user.area?.name}
                           size="small"
                           className="h-5 text-[10px]"
                         />
@@ -886,14 +1035,14 @@ export const AdminConfig: React.FC = () => {
                   onChange={(e) =>
                     setEditedUser({
                       ...editedUser,
-                      area: e.target.value as TicketArea,
+                      area: e.target.value,
                     })
                   }
                   sx={{ mt: 1 }}
                 >
-                  {areas.map((a) => (
-                    <MenuItem key={a} value={a}>
-                      {a}
+                  {getAllAreas().map((area) => (
+                    <MenuItem key={area.id} value={area.id.toString()}>
+                      {area.name}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -1027,18 +1176,144 @@ export const AdminConfig: React.FC = () => {
           </Dialog>
         </CustomTabPanel>
 
-        {/* --- TAB 2: AREAS --- */}
+        {/* --- TAB 2: CATEGORIES AND AREAS --- */}
         <CustomTabPanel value={tabValue} index={1}>
           <div className="px-8">
+            {/* Categories Section */}
             <Typography variant="h6" className="font-bold text-[#1e242b] mb-4">
-              Configuración de Áreas
+              Gestión de Categorías
             </Typography>
             <p className="text-sm text-gray-500 mb-6">
-              Defina las áreas operativas o departamentos que pueden ser
-              asignados a un ticket.
+              Organice las áreas operativas por categorías principales.
             </p>
 
+            {/* Add Category Form */}
             <div className="flex gap-4 mb-6 max-w-md">
+              <TextField
+                label="Nueva Categoría"
+                variant="outlined"
+                size="small"
+                fullWidth
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value.toUpperCase())}
+                placeholder="Ej: OFICINA"
+              />
+              <Button
+                variant="contained"
+                startIcon={<Plus />}
+                onClick={handleAddCategory}
+                disabled={!newCategory}
+                sx={{ backgroundColor: "#1e242b", whiteSpace: "nowrap" }}
+              >
+                Agregar
+              </Button>
+            </div>
+
+            {/* Categories List */}
+            <List className="bg-gray-50 rounded-lg border border-gray-200 max-h-64 overflow-y-auto max-w-2xl mb-8">
+              {console.log("Rendering categories:", categories)}
+              {categories.length === 0 ? (
+                <ListItem>
+                  <ListItemText 
+                    primary="No hay categorías configuradas" 
+                    primaryTypographyProps={{ 
+                      fontWeight: 500,
+                      style: { color: '#6b7280', textAlign: 'center' }
+                    }} 
+                  />
+                </ListItem>
+              ) : (
+                categories.map((category) => (
+                <React.Fragment key={category.id}>
+                  <ListItem
+                    secondaryAction={
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => handleEditCategory(category)}
+                          color="primary"
+                        >
+                          <Pencil size={18} />
+                        </IconButton>
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDeleteCategory(category)}
+                          color="error"
+                        >
+                          <Trash2 size={18} />
+                        </IconButton>
+                      </Box>
+                    }
+                  >
+                    <ListItemText
+                      primary={
+                        editingCategory?.id === category.id ? (
+                          <TextField
+                            value={editedCategory.nombre}
+                            onChange={(e) => setEditedCategory({ nombre: e.target.value })}
+                            size="small"
+                            variant="outlined"
+                            className="w-48"
+                          />
+                        ) : (
+                          category.nombre
+                        )
+                      }
+                      secondary={`${category?.areas?.length} área(s)`}
+                      primaryTypographyProps={{ fontWeight: 500 }}
+                    />
+                    {editingCategory?.id === category.id && (
+                      <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={handleSaveEditCategory}
+                          sx={{ minWidth: "auto", px: 2 }}
+                        >
+                          Guardar
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={handleCancelEditCategory}
+                          sx={{ minWidth: "auto", px: 2 }}
+                        >
+                          Cancelar
+                        </Button>
+                      </Box>
+                    )}
+                  </ListItem>
+                  <Divider component="li" />
+                </React.Fragment>
+              )))}
+            </List>
+
+            {/* Areas Section */}
+            <Typography variant="h6" className="font-bold text-[#1e242b] mb-4">
+              Gestión de Áreas por Categoría
+            </Typography>
+            <p className="text-sm text-gray-500 mb-6">
+              Agregue áreas específicas a cada categoría.
+            </p>
+
+            {/* Add Area Form */}
+            <div className="flex gap-4 mb-6 max-w-lg">
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={selectedCategoryForArea || ""}
+                  onChange={(e) => setSelectedCategoryForArea(Number(e.target.value))}
+                  label="Categoría"
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>
+                      {category.nombre}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 label="Nueva Área"
                 variant="outlined"
@@ -1046,43 +1321,65 @@ export const AdminConfig: React.FC = () => {
                 fullWidth
                 value={newArea}
                 onChange={(e) => setNewArea(e.target.value.toUpperCase())}
-                placeholder="Ej: INFRAESTRUCTURA"
+                placeholder="Ej: HELP DESK"
               />
               <Button
                 variant="contained"
                 startIcon={<Plus />}
                 onClick={handleAddArea}
-                disabled={!newArea}
+                disabled={!newArea || selectedCategoryForArea === null}
                 sx={{ backgroundColor: "#1e242b", whiteSpace: "nowrap" }}
               >
                 Agregar
               </Button>
             </div>
 
-            <List className="bg-gray-50 rounded-lg border border-gray-200 max-h-96 overflow-y-auto max-w-2xl">
-              {areas.map((area, index) => (
-                <React.Fragment key={area}>
-                  <ListItem
-                    secondaryAction={
-                      <IconButton
-                        edge="end"
-                        aria-label="delete"
-                        onClick={() => handleDeleteArea(area)}
-                        color="error"
-                      >
-                        <Trash2 size={18} />
-                      </IconButton>
-                    }
-                  >
-                    <ListItemText
-                      primary={area}
-                      primaryTypographyProps={{ fontWeight: 500 }}
-                    />
-                  </ListItem>
-                  {index < areas.length - 1 && <Divider component="li" />}
-                </React.Fragment>
-              ))}
-            </List>
+            {/* Areas by Category */}
+            {categories?.map((category) => (
+              <div key={category.id} className="mb-6">
+                <Typography variant="subtitle1" className="font-semibold text-[#1e242b] mb-3">
+                  {category.nombre}
+                </Typography>
+                {category.areas?.length > 0 ? (
+                  <List className="bg-gray-50 rounded-lg border border-gray-200 max-h-48 overflow-y-auto max-w-2xl">
+                    {category.areas.map((area, index) => {
+                      console.log("Rendering area:", area, "with ID:", area.id);
+                      return (
+                      <React.Fragment key={area.id}>
+                        <ListItem
+                          secondaryAction={
+                            <IconButton
+                              edge="end"
+                              aria-label="delete"
+                              onClick={() => {
+                                console.log("Delete clicked for area:", area);
+                                handleDeleteArea(area);
+                              }}
+                              color="error"
+                            >
+                              <Trash2 size={18} />
+                            </IconButton>
+                          }
+                        >
+                          <ListItemText
+                            primary={area.name}
+                            primaryTypographyProps={{ fontWeight: 500 }}
+                          />
+                        </ListItem>
+                        {index < category.areas.length - 1 && <Divider component="li" />}
+                      </React.Fragment>
+                      );
+                    })}
+                  </List>
+                ) : (
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-w-2xl">
+                    <Typography variant="body2" className="text-gray-500 text-center">
+                      No hay áreas configuradas para esta categoría
+                    </Typography>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </CustomTabPanel>
 

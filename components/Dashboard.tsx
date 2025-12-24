@@ -80,6 +80,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const [responsibleFilter, setResponsibleFilter] = useState<string>("All");
   const [priorityFilter, setPriorityFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
     start: "",
     end: "",
@@ -89,8 +90,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [ticketAreas, setTicketAreas] = useState<string[]>([]);
+  const [ticketAreas, setTicketAreas] = useState<{id: number; name: string}[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const token = localStorage.getItem("token") || undefined;
   useEffect(() => {
@@ -99,11 +101,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         setLoading(true);
         setError("");
 
-        const [ticketsRes, usersRes, areasRes, countriesRes] = await Promise.all([
+        const [ticketsRes, usersRes, areasRes, countriesRes, categoriesRes] = await Promise.all([
           apiRequest<Ticket[]>("/tickets", "GET", { authToken: token }),
           apiRequest<User[]>("/users", "GET", { authToken: token }),
-          apiRequest<string[]>("/areas", "GET", { authToken: token }),
+          apiRequest<{id: number; name: string}[]>("/areas", "GET", { authToken: token }),
           apiRequest<string[]>("/countries", "GET", { authToken: token }),
+          apiRequest<Category[]>("/categorias", "GET", { authToken: token }),
           console.log(
             "Dashboard stats:",
             await apiRequest<string[]>("/dashboard/stats", "GET", {
@@ -116,7 +119,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         console.log("Tickets:", ticketsRes);
         setUsers(usersRes);
         setCountries(countriesRes);
-
+        setCategories(categoriesRes);
         setTicketAreas(areasRes);
         console.log("Users:", usersRes);
         console.log("Areas:", areasRes);
@@ -136,8 +139,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     return tickets.filter((t) => {
       // Admin sees all
       if (currentUser.role === "admin") return true;
+      //if (currentUser.role === "agent") return t.assignee.country.id === currentUser.country.id;
       // Agent sees only their country
-      return t.country === currentUser.country;
+      return t.assignee.country.id == (typeof currentUser.country === 'string' ? currentUser.country : currentUser.country.id);
     });
   }, [currentUser, tickets]);
 
@@ -147,10 +151,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   //   return Array.from(paises);
   // }, [countries]);
 
+  // Filter areas based on selected category
+  const filteredAreas = useMemo(() => {
+    if (categoryFilter === "All") {
+      return ticketAreas;
+    }
+    return ticketAreas.filter(area => {
+      const category = categories.find(cat => cat.id === Number(categoryFilter));
+      return category && category.areas.some(catArea => catArea.id === area.id);
+    });
+  }, [categoryFilter, ticketAreas, categories]);
+
+  // Reset area filter when category changes to ensure validity
+  useEffect(() => {
+    if (categoryFilter !== "All") {
+      const isCurrentAreaValid = filteredAreas.some(area => area.name === areaFilter) || areaFilter === "All";
+      if (!isCurrentAreaValid) {
+        setAreaFilter("All");
+      }
+    }
+  }, [categoryFilter, filteredAreas, areaFilter]);
+
   // 2. Filter Logic (Applies to Metrics and Total Table, NOT Pending Table totally)
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((t) => {
-      if (areaFilter !== "All" && t.area !== areaFilter) return false;
+      if (categoryFilter !== "All" && t.assignee?.area?.categoriaId !== Number(categoryFilter)) return false;
+      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) return false;
       if (countryFilter !== "All" && t.assignee.country.id !== Number(countryFilter)) return false;
       if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter)
         return false;
@@ -175,6 +201,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     priorityFilter,
     statusFilter,
     dateRange,
+    categoryFilter
   ]);
 
   // 3. KPI Calculations
@@ -247,9 +274,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     const areas = ticketAreas;
     return areas
       .map((area) => {
-        const areaTickets = filteredTickets.filter((t) => t.area === area);
+        const areaTickets = filteredTickets.filter((t) => t.assignee?.area?.name === area.name);
         return {
-          name: area,
+          name: area.name,
           Finalizadas: areaTickets.filter(
             (t) => t.status === TicketStatus.RESOLVED
           ).length,
@@ -263,6 +290,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       .filter((d) => d.Finalizadas > 0 || d.Pendientes > 0);
   }, [filteredTickets, ticketAreas]);
 
+
+
   // 5. Table Data (Specific Rules)
   // Pending Tasks: All accessible tickets that are NOT resolved/cancelled.
   // "El filtro de periodo no debe de afectar a la tabla de tareas atrasadas/pendientes"
@@ -275,8 +304,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       )
         return false;
       // Apply non-date filters
-      if (areaFilter !== "All" && t.area !== areaFilter) return false;
-      if (countryFilter !== "All" && t.country !== countryFilter) return false;
+      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) return false;
+      if (categoryFilter !== "All" && t.assignee?.area?.category?.id !== Number(categoryFilter)) return false;
+      if (countryFilter !== "All" && t.assignee?.country?.country_name !== countryFilter) return false;
       if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter)
         return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter)
@@ -308,10 +338,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           <TableCell className="font-medium text-[#e51b24]">
             {ticket.id}
           </TableCell>
-          <TableCell>{ticket.country}</TableCell>
+          <TableCell>{ticket.assignee?.country?.country_name}</TableCell>
           <TableCell>{ticket.priority.split(" ")[1]}</TableCell>{" "}
           {/* Show just '1', '2' etc */}
-          <TableCell>{ticket.area}</TableCell>
+          <TableCell>{ticket.assignee?.area?.name}</TableCell>
           <TableCell className="max-w-xs truncate">
             {ticket.assignee?.name || "Unassigned"}
           </TableCell>
@@ -447,7 +477,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         </div>
         <Grid container spacing={2}>
           {/* Country Filter */}
-          <Grid item xs={12} md={2}>
+          <Grid item={true} xs={12} md={2}>
             <TextField
               select
               fullWidth
@@ -468,7 +498,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
             </TextField>
           </Grid>
 
-          <Grid item xs={12} md={2}>
+          {/* Categoria filter */}
+
+          <Grid item={true} xs={12} md={2}>
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Categoría"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              variant="filled"
+              className="bg-white rounded"
+              InputProps={{ disableUnderline: true }}
+            >
+              <MenuItem value="All">Todos</MenuItem>
+              {categories?.map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+
+
+
+          <Grid item={true} xs={12} md={2}>
             <TextField
               select
               fullWidth
@@ -481,14 +537,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               InputProps={{ disableUnderline: true }}
             >
               <MenuItem value="All">Todas</MenuItem>
-              {ticketAreas.map((a) => (
-                <MenuItem key={a} value={a}>
-                  {a}
+              {filteredAreas.map((a) => (
+                <MenuItem key={a.id} value={a.name}>
+                  {a.name}
                 </MenuItem>
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item={true} xs={12} md={2}>
             <TextField
               select
               fullWidth
@@ -510,7 +566,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
                 ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item={true} xs={12} md={2}>
             <TextField
               select
               fullWidth
@@ -530,7 +586,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item={true} xs={12} md={2}>
             <TextField
               select
               fullWidth
@@ -550,7 +606,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item={true} xs={12} md={2}>
             <div className="flex flex-col gap-1">
               <input
                 type="date"
@@ -677,27 +733,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           <Table size="small">
             <TableHead className="bg-[#e51b24]">
               <TableRow>
-                <TableCell className="text-white font-bold">
+                <th className="text-white font-bold">
                   ID Ticket
-                </TableCell>
-                <TableCell className="text-white font-bold">País</TableCell>
-                <TableCell className="text-white font-bold">
+                </th>
+                <th className="text-white font-bold" >País</th>
+                <th className="text-white font-bold">
                   Prioridad
-                </TableCell>
-                <TableCell className="text-white font-bold">Área</TableCell>
-                <TableCell className="text-white font-bold px-2 max-w-xs truncate">
+                </th>
+                <th className="text-white font-bold">Área</th>
+                <th className="text-white font-bold px-2 max-w-xs truncate">
                   Responsable
-                </TableCell>
-                <TableCell className="text-white font-bold px-2 max-w-xs truncate">
+                </th>
+                <th className="text-white font-bold px-2 max-w-xs truncate">
                   Descripción
-                </TableCell>
-                <TableCell className="text-white font-bold">Ingreso</TableCell>
-                <TableCell className="text-white font-bold">Entrega</TableCell>
-                <TableCell className="text-white font-bold">Estado</TableCell>
-                <TableCell className="text-white font-bold" align="center">
+                </th>
+                <th className="text-white font-bold">Ingreso</th>
+                <th className="text-white font-bold">Entrega</th>
+                <th className="text-white font-bold">Estado</th>
+                <th className="text-white font-bold" align="center">
                   Días Atraso
-                </TableCell>
-                <TableCell className="text-white font-bold"></TableCell>
+                </th>
+                <th className="text-white font-bold"></th>
               </TableRow>
             </TableHead>
             <TableBody>

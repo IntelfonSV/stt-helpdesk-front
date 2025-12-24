@@ -24,11 +24,16 @@ interface CreateTicketResponse {
   id: number;
 }
 
+interface Area {
+  id: number;
+  name: string;
+}
+
 export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdTicketId, setCreatedTicketId] = useState("");
-  const { emailContent } = EmailHelper();
+  const { emailAsignado } = EmailHelper();
 
   const token = localStorage.getItem("token") || undefined;
 
@@ -36,7 +41,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
 
   const [users, setUsers] = useState<User[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
-  const [areas, setAreas] = useState<string[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,9 +62,10 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState(""); // NUEVO
   const [type, setType] = useState<string>("request"); // NUEVO (puedes ajustar valores al backend)
-  const [area, setArea] = useState<TicketArea | "">("");
+  const [area, setArea] = useState<number | "">("");
   const [priority, setPriority] = useState<TicketPriority>(TicketPriority.P4);
   const [assignee, setAssignee] = useState("");
+  const [assignees, setAssignees] = useState<User[]>([]);
 
   // Fechas
   const [entryDate] = useState(new Date().toISOString());
@@ -74,7 +80,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
 
         const [usersRes, areasRes, countriesRes] = await Promise.all([
           apiRequest<User[]>("/users", "GET", { authToken: token }),
-          apiRequest<string[]>("/areas", "GET", { authToken: token }),
+          apiRequest<Area[]>("/areas", "GET", { authToken: token }),
           apiRequest<Country[]>("/countries", "GET", { authToken: token }),
         ]);
 
@@ -98,10 +104,10 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
       if (currentUser.role === "admin") {
         setCountry(countries[0].country_name);
       } else {
-        setCountry(currentUser.country);
+        setCountry(currentUser.country.country_name);
       }
     }
-  }, [currentUser, country, countries]);
+  }, [currentUser, countries]);
 
   // Recalcular SLA cuando cambia prioridad
   useEffect(() => {
@@ -121,7 +127,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
       const payload = {
         subject,
         /*type, // NUEVO: lo estás enviando al backend*/
-        area,
+        //areaId: area, // Enviar ID en lugar de nombre
         priority,
         description, // NUEVO: detalle separado del asunto
         requesterId: currentUser.id,
@@ -159,10 +165,9 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
         await apiRequest('/email/send', 'POST', {
           authToken: token,
           body: {
-            to: users?.find(u => u.id === assignee)?.email || "",
-            cc: currentUser.email,
+            to: `${users?.find(u => u.id === assignee)?.email || ""}`,
             subject: `Nuevo ticket asignado: ${subject}`,
-            html: emailContent({
+            html: emailAsignado({
                         asignBy: currentUser.name,
                         assignTo: users?.find(u => u.id === assignee)?.name || "N/A",
 
@@ -181,7 +186,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   const handleReset = () => {
     setSubject("");
     setDescription("");
-    setArea("");
+    setArea(""); // Reset to empty string (number | "")
     setPriority(TicketPriority.P4);
     setAssignee("");
     setCreatedTicketId("");
@@ -190,12 +195,23 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   };
 
   // Asignables: agentes / especialistas del país seleccionado
-  const availableAssignees = users?.filter(
+
+
+  useEffect(() => {
+    console.log("currentUser: ", currentUser);
+    console.log("users: ", users);
+    console.log("country: ", country);
+    console.log("area: ", area);
+    const availableAssignees = users?.filter(
     (u: any) =>
-      (u.role === "agent" || u.role === "specialist") &&
-      getCountryName(u.country) === country &&
-      (area ? u.area === area : true)
+      u.receivableFrom.includes(`${currentUser.id}`) && 
+      getCountryName(u.country.country_name) === country &&
+      (area ? u.area.id == area : false)
   );
+
+  console.log( "availableAssignees: ",availableAssignees);
+  setAssignees(availableAssignees);
+  }, [country, area, users]);
 
   if (isSuccess) {
     return (
@@ -341,16 +357,16 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               label="Área Solicitada"
               fullWidth
               required
-              value={area}
+              value={area || ""}
               onChange={(e) => {
-                setArea(e.target.value as TicketArea);
+                setArea(Number(e.target.value));
                 setAssignee("");
               }}
               disabled={isSubmitting || loading}
             >
               {areas.map((a) => (
-                <MenuItem key={a} value={a}>
-                  {a}
+                <MenuItem key={a.id} value={a.id}>
+                  {a.name}
                 </MenuItem>
               ))}
             </TextField>
@@ -419,15 +435,15 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               value={assignee}
               onChange={(e) => setAssignee(e.target.value)}
               helperText={
-                availableAssignees.length === 0
+                assignees.length === 0
                   ? "No hay usuarios disponibles en el país seleccionado."
                   : ""
               }
               disabled={isSubmitting || loading}
             >
-              {availableAssignees?.map((user) => (
+              {assignees?.map((user) => (
                 <MenuItem key={user.id} value={user.id}>
-                  {user.name} ({user.area})
+                  {user.name} ({user.area.name})
                 </MenuItem>
               ))}
             </TextField>

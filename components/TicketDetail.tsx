@@ -26,6 +26,7 @@ import {
 import { TicketStatus, User } from "../types";
 import { formatDate } from "../utils";
 import { apiRequest } from "../lib/apiClient";
+import EmailHelper from "./helpers/EmailHelper";
 
 interface TicketDetailProps {
   currentUser: User | null;
@@ -35,6 +36,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
   const { id } = useParams();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const token = localStorage.getItem("token") || undefined;
+  const { emailAsignado, emailSeguimiento, emailFinalizado, emailCancelado } = EmailHelper();
 
   const getTicket = () => {
     apiRequest<Ticket>(`/tickets/${id}`, "GET", { authToken: token }).then(
@@ -66,6 +68,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
   );
   const [actionLog, setActionLog] = useState("");
   const [isEditingDate, setIsEditingDate] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState("");
 
   // Reset state if ticket ID changes (navigation between tickets)
   useEffect(() => {
@@ -75,6 +78,44 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       setActionLog("");
     }
   }, [ticket?.id, ticket]);
+
+  // Update elapsed time counter every second
+  useEffect(() => {
+    if (!ticket) return;
+
+    const updateElapsedTime = () => {
+      const now = new Date();
+      const created = new Date(ticket.entryDate);
+      const diff = now.getTime() - created.getTime();
+      
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      
+      const remainingHours = hours % 24;
+      const remainingMinutes = minutes % 60;
+      const remainingSeconds = seconds % 60;
+      
+      let timeString = "";
+      if (days > 0) {
+        timeString = `${days}d ${remainingHours}h ${remainingMinutes}m ${remainingSeconds}s`;
+      } else if (hours > 0) {
+        timeString = `${remainingHours}h ${remainingMinutes}m ${remainingSeconds}s`;
+      } else if (minutes > 0) {
+        timeString = `${remainingMinutes}m ${remainingSeconds}s`;
+      } else {
+        timeString = `${remainingSeconds}s`;
+      }
+      
+      setElapsedTime(timeString);
+    };
+
+    updateElapsedTime();
+    const interval = setInterval(updateElapsedTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [ticket]);
 
   if (!ticket || !currentUser) return <div>Cargando...</div>;
 
@@ -109,14 +150,20 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       body: { userId: currentUser.id, status: pendingStatus, actionLog },
     }).then((res) => {
       getTicket();
+      
+      // Send email notification for tracking
+      notifyTracking(pendingStatus, actionLog);
+      
+      // Send email notification for finalization if status is RESOLVED
+      if (pendingStatus === TicketStatus.RESOLVED) {
+        notifyFinalized();
+      }
     });
 
     // Commit the pending status to current status
     setCurrentStatus(pendingStatus);
 
-    //alert(`Acción registrada: "${actionLog}". Estado actualizado a: ${pendingStatus}`);
-
-    // Reset log but keep statu
+    // Reset log but keep status
   };
 
   const handleDateChange = () => {
@@ -130,6 +177,75 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     setIsEditingDate(false);
   };
 
+  // Email notification functions
+  const notifyTracking = async (status: TicketStatus, actionLog: string) => {
+    try {
+      await apiRequest('/email/send', 'POST', {
+        authToken: token,
+        body: {
+          to: `${ticket?.requester?.email || ""}`,
+          subject: `Seguimiento de ticket: ${ticket?.id}`,
+          html: emailSeguimiento({
+            asignBy: currentUser.name,
+            assignTo: ticket?.assignee?.name || "N/A",
+            correlativo: ticket?.id || "N/A",
+            fechaSeguimiento: new Date().toISOString(),
+            estado: status,
+            subject: ticket?.subject || "N/A",
+            accionRealizada: actionLog
+          })
+        }
+      });
+    } catch (emailErr) {
+      console.error("Error enviando correo de seguimiento:", emailErr);
+    }
+  };
+
+  const notifyFinalized = async () => {
+    try {
+      await apiRequest('/email/send', 'POST', {
+        authToken: token,
+        body: {
+          to: `${ticket?.requester?.email || ""}`,
+          subject: `Ticket finalizado: ${ticket?.id}`,
+          html: emailFinalizado({
+            correlativo: ticket?.id || "N/A",
+            asignBy: ticket?.requester?.name || "N/A",
+            finalizadoPor: currentUser.name,
+            fechaCierre: new Date().toISOString(),
+            diasAtraso: "0", // Calculate if needed
+            subject: ticket?.subject || "N/A",
+            resolucion: actionLog || "Ticket finalizado"
+          })
+        }
+      });
+    } catch (emailErr) {
+      console.error("Error enviando correo de finalización:", emailErr);
+    }
+  };
+
+  const notifyCancelled = async () => {
+    try {
+      await apiRequest('/email/send', 'POST', {
+        authToken: token,
+        body: {
+          to: `${ticket?.requester?.email || ""}`,
+          subject: `Ticket cancelado: ${ticket?.id}`,
+          html: emailCancelado({
+            correlativo: ticket?.id || "N/A",
+            asignBy: ticket?.requester?.name || "N/A",
+            canceladoPor: currentUser.name,
+            fechaCancelacion: new Date().toISOString(),
+            subject: ticket?.subject || "N/A",
+            motivoCancelacion: "Ticket cancelado por el solicitante"
+          })
+        }
+      });
+    } catch (emailErr) {
+      console.error("Error enviando correo de cancelación:", emailErr);
+    }
+  };
+
   // Handler for the global Cancel button (Requester action)
   const handleCancelTicket = () => {
     if (window.confirm("¿Está seguro de cancelar este ticket?")) {
@@ -138,6 +254,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         body: { reason: "Ticket cancelado por el solicitante" },
       }).then(() => {
         getTicket();
+        
+        // Send email notification for cancellation
+        notifyCancelled();
       });
       setCurrentStatus(TicketStatus.CANCELLED);
       setPendingStatus(TicketStatus.CANCELLED);
@@ -154,24 +273,25 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         >
           Volver
         </Button>
-        <div className="flex-1">
-          <div className="flex items-start sm:items-center gap-3">
-            <Typography variant="h4" className="font-bold text-[#1e242b]">
-              {ticket.id}: {ticket.subject}
-            </Typography>
-            <Chip
-              label={currentStatus}
-              color={
-                currentStatus === TicketStatus.RESOLVED
-                  ? "success"
-                  : currentStatus === TicketStatus.CANCELLED
-                  ? "error"
-                  : "primary"
-              }
-              variant="outlined"
-            />
-          </div>
-        </div>
+            <div className="flex-1">
+              <div className="flex items-start sm:items-center gap-3">
+                <Typography variant="h4" className="font-bold text-[#1e242b] bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
+                  {ticket.id}: {ticket.subject}
+                </Typography>
+                <Chip
+                  label={currentStatus}
+                  color={
+                    currentStatus === TicketStatus.RESOLVED
+                      ? "success"
+                      : currentStatus === TicketStatus.CANCELLED
+                      ? "error"
+                      : "primary"
+                  }
+                  variant="outlined"
+                  className="shadow-sm"
+                />
+              </div>
+            </div>
         {/* Cancel Button: Only Requester can cancel */}
         {canCancel && (
           <Button variant="outlined" color="error" onClick={handleCancelTicket}>
@@ -181,14 +301,14 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       </div>
 
       <Grid container spacing={4}>
-        <Grid item xs={12} lg={8}>
-          <Paper className="p-6 border border-gray-200 shadow-sm rounded-xl mb-6">
+        <Grid item={true} xs={12} lg={8}>
+          <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl mb-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
             <Typography
               variant="h6"
               className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
             >
-              <Tag size={20} className="text-[#e51b24]" />
-              Descripción de la Solicitud
+              <Tag size={20} className="text-[#e51b24] drop-shadow-sm" />
+              <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">Descripción de la Solicitud</span>
             </Typography>
             <Typography
               variant="body1"
@@ -215,11 +335,12 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             {canAddTracking &&
               currentStatus !== TicketStatus.RESOLVED &&
               currentStatus !== TicketStatus.CANCELLED && (
-                <Paper className="p-4 border border-gray-200 bg-gray-50">
+                <Paper className="p-4 border border-gray-200 bg-gradient-to-br from-gray-50 to-blue-50 shadow-sm hover:shadow-md transition-shadow duration-200">
                   <Typography
                     variant="subtitle2"
-                    className="mb-2 font-bold text-gray-700"
+                    className="mb-2 font-bold text-gray-700 flex items-center gap-2"
                   >
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     Registrar Acción Realizada
                   </Typography>
                   <TextField
@@ -255,6 +376,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                       onClick={handleSaveAction}
                       disabled={!actionLog}
                       sx={{ backgroundColor: "#e51b24" }}
+                      className="shadow-md hover:shadow-lg transition-shadow duration-200"
                     >
                       Registrar y Guardar
                     </Button>
@@ -262,9 +384,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   {/* UX Hint: Show warning if user selected a closing status but hasn't saved yet */}
                   {(pendingStatus === TicketStatus.RESOLVED ||
                     pendingStatus === TicketStatus.CANCELLED) && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-orange-50 p-2 rounded">
-                      <AlertCircle size={14} />
-                      <span>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-gradient-to-r from-orange-50 to-yellow-50 p-3 rounded-lg border border-orange-200 shadow-sm">
+                      <AlertCircle size={14} className="flex-shrink-0" />
+                      <span className="font-medium">
                         Atención: Al guardar, el ticket se cerrará y no podrá
                         agregar más acciones.
                       </span>
@@ -275,35 +397,35 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
             {/* History List */}
             <div className="space-y-4">
-              <div className="flex gap-4 p-4 bg-gray-50 border border-gray-100 rounded-lg opacity-75">
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+              <div className="flex gap-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-xs font-bold text-white shadow-sm">
                   Sys
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 font-medium">
                     {formatDate(ticket.entryDate)}
                   </p>
-                  <p className="text-sm">Ticket ingresado al sistema.</p>
+                  <p className="text-sm font-medium text-gray-700">Ticket ingresado al sistema.</p>
                 </div>
               </div>
               {ticket.actions.map((action) => (
                 <div
                   key={action.id}
-                  className="flex gap-4 p-4 bg-white border border-gray-100 rounded-lg shadow-sm"
+                  className="flex gap-4 p-4 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                 >
                   {/* <Avatar sx={{ bgcolor: '#1e242b', width: 32, height: 32 }}>{action.user.charAt(0)}</Avatar> */}
                   <div className="flex-1">
                     <div className="flex justify-between items-baseline">
-                  <Avatar sx={{ width: 32, height: 32 }}>{action.userNameSnapshot?.charAt(0) || 'U'}</Avatar>
+                  <Avatar sx={{ width: 32, height: 32, className: 'shadow-sm' }}>{action.userNameSnapshot?.charAt(0) || 'U'}</Avatar>
 
-                      <Typography variant="subtitle2" className="font-bold">
+                      <Typography variant="subtitle2" className="font-bold text-gray-800">
                         {action.userNameSnapshot}
                       </Typography>
-                      <Typography variant="caption" className="text-gray-500">
+                      <Typography variant="caption" className="text-gray-500 font-medium">
                         {formatDate(action.date)}
                       </Typography>
                     </div>
-                    <Typography variant="body2" className="text-gray-700 mt-1">
+                    <Typography variant="body2" className="text-gray-700 mt-1 leading-relaxed">
                       {action.action}
                     </Typography>
                   </div>
@@ -313,8 +435,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
           </div>
         </Grid>
 
-        <Grid item xs={12} lg={4}>
-          <Paper className="p-6 border border-gray-200 shadow-sm rounded-xl space-y-6">
+        <Grid item={true} xs={12} lg={4}>
+          <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl space-y-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
             <div>
               <Typography
                 variant="subtitle2"
@@ -334,7 +456,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   <Tag size={18} className="text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-500">Área</p>
-                    <p className="font-medium text-sm">{ticket.area}</p>
+                    <p className="font-medium text-sm">{ticket.assignee?.area?.name}</p>
                   </div>
                 </div>
                 <div className="flex items-start sm:items-center gap-3">
@@ -344,6 +466,17 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                     <p className="font-medium text-sm">
                       {formatDate(ticket.entryDate)}
                     </p>
+                    <div className="mt-2 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <p className="text-xs font-bold text-blue-700">
+                          Tiempo transcurrido:
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold text-blue-900 mt-1">
+                        {elapsedTime}
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">

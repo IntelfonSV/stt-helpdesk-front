@@ -5,8 +5,8 @@ export enum TicketPriority {
   P1 = 'Prioridad 1 (1 Hora)',
   P2 = 'Prioridad 2 (24 Horas)',
   P3 = 'Prioridad 3 (72 Horas)',
-  P4 = 'Prioridad 4 (Indefinido)',
-  P5 = 'Prioridad 5 (Indefinido)',
+  P4 = 'Prioridad 4 (10 Días)',
+  P5 = 'Prioridad 5 (15 Días)',
 }
 
 export enum TicketStatus {
@@ -36,8 +36,8 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  country: object;
-  area: TicketArea;
+  country: Country;
+  area: string;
   managerId?: string; // Persona a cargo
   avatar?: string;
   // Nuevos campos para configuración avanzada
@@ -45,11 +45,41 @@ export interface User {
   receivableFrom?: string[]; // IDs de personas que pueden ponerle tickets a este usuario
 }
 
+export interface Country {
+  id: string;
+  country_name: string;
+}
+
 export interface TicketAction {
   id: string;
   date: string; // ISO String
   action: string;
   user: string;
+}
+
+export interface Area {
+  id: number;
+  name: string;
+}
+
+export interface Category {
+  id: number;
+  nombre: string;
+  createdAt: string;
+  updatedAt: string;
+  areas: Area[];
+}
+
+export interface CreateCategoryRequest {
+  nombre: string;
+}
+
+export interface UpdateCategoryRequest {
+  nombre: string;
+}
+
+export interface CreateAreaRequest {
+  name: string;
 }
 
 export interface Ticket {
@@ -87,8 +117,8 @@ export const MOCK_USERS: User[] = [
     name: 'Roberto Canto', 
     email: 'rcanto@grupostt.com', 
     role: 'admin', 
-    country: 'Global', // Admin sees all regardless
-    area: TicketArea.OFICINA, 
+    country: { id: '1', country_name: 'Global' }, // Admin sees all regardless
+    area: 'OFICINA', 
     avatar: 'https://ui-avatars.com/api/?name=Roberto+Canto&background=e51b24&color=fff',
     assignableTo: ['2', '3', '4'],
     receivableFrom: ['2', '3']
@@ -98,8 +128,8 @@ export const MOCK_USERS: User[] = [
     name: 'Jefe El Salvador', 
     email: 'jefesv@grupostt.com', 
     role: 'agent', 
-    country: 'El Salvador', 
-    area: TicketArea.CENTRO_ADMIN,
+    country: { id: '2', country_name: 'El Salvador' },
+    area: 'CENTRO_ADMIN',
     avatar: 'https://ui-avatars.com/api/?name=Jefe+SV&background=1e242b&color=fff',
     assignableTo: [],
     receivableFrom: ['1']
@@ -109,8 +139,8 @@ export const MOCK_USERS: User[] = [
     name: 'Jefe Guatemala', 
     email: 'jefegt@grupostt.com', 
     role: 'agent', 
-    country: 'Guatemala', 
-    area: TicketArea.OFICINA,
+    country: { id: '3', country_name: 'Guatemala' },
+    area: 'OFICINA',
     avatar: 'https://ui-avatars.com/api/?name=Jefe+GT&background=1e242b&color=fff',
     assignableTo: ['4'],
     receivableFrom: ['1', '4']
@@ -120,8 +150,8 @@ export const MOCK_USERS: User[] = [
     name: 'Operativo', 
     email: 'operativo@grupostt.com', 
     role: 'specialist', 
-    country: 'Guatemala', 
-    area: TicketArea.HELPDESK,
+    country: { id: '3', country_name: 'Guatemala' },
+    area: 'HELPDESK',
     avatar: 'https://ui-avatars.com/api/?name=Operativo+User&background=6b7280&color=fff',
     assignableTo: ['3'],
     receivableFrom: ['1', '3']

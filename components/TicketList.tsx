@@ -104,7 +104,7 @@ export const TicketList: React.FC<TicketListProps> = ({ currentUser }) => {
                                     {isOverdue && <AlertCircle size={14} className="text-[#e51b24]" />}
                                 </div>
                             </TableCell>
-                            <TableCell>{ticket?.area}</TableCell>
+                            <TableCell>{typeof ticket?.assignee === 'object' ? ticket?.assignee?.area?.name : ticket?.assignee || '-'}</TableCell>
                             {showAssigneeColumn ? (
                                 <TableCell>{ticket?.assignee?.name || '-'}</TableCell>
                             ) : (

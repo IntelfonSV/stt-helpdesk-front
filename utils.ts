@@ -64,10 +64,12 @@ export const calculateSLA = (entryDateStr: string, priority: TicketPriority): st
       dueDate = addBusinessDays(dueDate, 3);
       break;
     case TicketPriority.P4:
+      // 10 business days
+      dueDate = addBusinessDays(dueDate, 10);
+      break;
     case TicketPriority.P5:
-      // Valid until closed. Return far future or keep null logic in UI.
-      // We set a placeholder far future date for sorting purposes
-      dueDate.setFullYear(dueDate.getFullYear() + 10);
+      // 15 business days
+      dueDate = addBusinessDays(dueDate, 15);
       break;
   }
 
