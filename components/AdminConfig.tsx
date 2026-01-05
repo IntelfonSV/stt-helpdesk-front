@@ -534,7 +534,12 @@ export const AdminConfig: React.FC = () => {
   const handleOpenEditUser = (user: User) => {
     console.log("Opening edit user:", user);
     setEditingUser(user);
-    setEditedUser({ ...user });
+    // Convert area to string ID for the select field
+    const areaId = typeof user.area === 'string' ? user.area : user.area?.id?.toString() || "";
+    setEditedUser({ 
+      ...user,
+      area: areaId
+    });
   };
 
   const handleCloseEditUser = () => {
@@ -932,7 +937,7 @@ export const AdminConfig: React.FC = () => {
                           className="h-5 text-[10px]"
                         />
                         <Chip
-                          label={user.area?.name}
+                          label={typeof user.area === 'string' ? user.area : user.area?.name}
                           size="small"
                           className="h-5 text-[10px]"
                         />

@@ -37,7 +37,7 @@ export interface User {
   email: string;
   role: UserRole;
   country: Country;
-  area: string;
+  area: string | Area; // Can be either string ID or Area object
   managerId?: string; // Persona a cargo
   avatar?: string;
   // Nuevos campos para configuración avanzada
