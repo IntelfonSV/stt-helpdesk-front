@@ -1,5 +1,5 @@
 {
-  "name": "STT Service Desk",
-  "description": "Sistema de Gestión de Tickets Corporativo para Grupo STT con control de SLA y Dashboard inteligente.",
+  "name": "Reclamos",
+  "description": "Sistema de Gestión de Reclamos Corporativos",
   "requestFramePermissions": []
 }

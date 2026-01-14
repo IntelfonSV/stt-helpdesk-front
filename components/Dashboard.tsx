@@ -724,7 +724,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           variant="h6"
           className="font-bold mb-2 text-[#1e242b] border-l-4 border-[#e51b24] pl-2"
         >
-          Tareas Pendientes (Prioridad por Atraso)
+          Reclamos Pendientes (Prioridad por Atraso)
         </Typography>
         <TableContainer
           component={Paper}
@@ -734,7 +734,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
             <TableHead className="bg-[#e51b24]">
               <TableRow>
                 <th className="text-white font-bold">
-                  ID Ticket
+                  ID Reclamo
                 </th>
                 <th className="text-white font-bold" >País</th>
                 <th className="text-white font-bold">
@@ -769,7 +769,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           variant="h6"
           className="font-bold mb-2 text-[#1e242b] border-l-4 border-gray-800 pl-2"
         >
-          Total de Tareas Asignadas (Histórico)
+          Total de Reclamos Asignados (Histórico)
         </Typography>
         <TableContainer
           component={Paper}
@@ -778,7 +778,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           <Table size="small">
             <TableHead className="bg-gray-800">
               <TableRow>
-                <th className="text-white font-bold">ID Ticket</th>
+                <th className="text-white font-bold">ID Reclamo</th>
                 <th className="text-white font-bold">País</th>
                 <th className="text-white font-bold">Prioridad</th>
                 <th className="text-white font-bold">Área</th>

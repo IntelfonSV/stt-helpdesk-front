@@ -15,8 +15,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, userRole }) => {
   // Define all possible items
   const allItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'agent'] },
-    { name: 'Mis Tickets', path: '/tickets', icon: Ticket, roles: ['admin', 'agent', 'specialist'] },
-    { name: 'Crear Ticket', path: '/create-ticket', icon: PlusCircle, roles: ['admin', 'agent'] },
+    { name: 'Mis reclamos', path: '/tickets', icon: Ticket, roles: ['admin', 'agent', 'specialist'] },
+    { name: 'Crear reclamo', path: '/create-ticket', icon: PlusCircle, roles: ['admin', 'agent'] },
     // Reports Removed
     { name: 'Configuración', path: '/config', icon: Settings, roles: ['admin'] },
     { name: 'Cambiar Contraseña', path: '/change-password', icon: Settings, roles: ['admin', 'agent', 'specialist'] },
@@ -30,7 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, userRole }) => {
   return (
     <aside className="w-64 bg-[#1e242b] text-white flex flex-col h-screen fixed left-0 top-0 shadow-xl z-20">
       <div className="p-6 border-b border-gray-700/50 flex items-center justify-center">
-        <Logo variant="light" />
+        {/* <Logo variant="light" /> */}
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-2">

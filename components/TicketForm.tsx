@@ -149,8 +149,8 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
       setIsSuccess(true);
       
     } catch (err) {
-      console.error("Error creando ticket:", err);
-      setError("Error al crear el ticket. Inténtelo de nuevo.");
+      console.error("Error creando reclamo:", err);
+      setError("Error al crear el reclamo. Inténtelo de nuevo.");
       setIsSubmitting(false);
     }
   };
@@ -166,7 +166,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
           authToken: token,
           body: {
             to: `${users?.find(u => u.id === assignee)?.email || ""}`,
-            subject: `Nuevo ticket asignado: ${subject}`,
+            subject: `Nuevo reclamo asignado: ${subject}`,
             html: emailAsignado({
                         asignBy: currentUser.name,
                         assignTo: users?.find(u => u.id === assignee)?.name || "N/A",
@@ -258,10 +258,10 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
     <div className="max-w-2xl mx-auto animate-fade-in pb-12">
       <div className="mb-6 text-center">
         <h1 className="text-3xl font-bold text-[#1e242b]">
-          Ingresar Solicitud
+          Ingresar Reclamo  
         </h1>
         <p className="text-gray-500 mt-1">
-          Complete los datos para generar un nuevo ticket.
+          Complete los datos para generar un nuevo reclamo.
         </p>
       </div>
 
@@ -286,7 +286,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               variant="h6"
               className="text-[#1e242b] font-bold border-b border-gray-100 pb-2"
             >
-              1. Detalles del Requerimiento
+              1. Detalles del Reclamo
             </Typography>
 
             <TextField
@@ -319,7 +319,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               required
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Título corto del requerimiento..."
+              placeholder="Título corto del reclamo..."
               disabled={isSubmitting || loading}
             />
 
@@ -331,7 +331,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describa detalladamente la tarea o problema..."
+              placeholder="Describa detalladamente el reclamo..."
               disabled={isSubmitting || loading}
             />
 

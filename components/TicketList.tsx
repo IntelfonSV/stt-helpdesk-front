@@ -161,9 +161,9 @@ export const TicketList: React.FC<TicketListProps> = ({ currentUser }) => {
     <div className="space-y-8 animate-fade-in pb-12">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-[#1e242b]">Mis Tickets</h1>
+          <h1 className="text-3xl font-bold text-[#1e242b]">Mis Reclamos</h1>
           <p className="text-gray-500 mt-1">
-            Gestión de tareas asignadas y solicitudes realizadas.
+            Gestión de reclamos asignados y solicitudes realizadas.
           </p>
         </div>
       </div>
@@ -173,10 +173,10 @@ export const TicketList: React.FC<TicketListProps> = ({ currentUser }) => {
         <div className="flex items-center gap-2 mb-4">
             <Clock className="text-[#e51b24]" size={24} />
             <Typography variant="h6" className="font-bold text-[#1e242b]">
-                Mis Tickets Asignados (Pendientes)
+                Mis Reclamos Asignados (Pendientes)
             </Typography>
         </div>
-        {renderTable(assignedActive, "No tienes tickets pendientes asignados.", false)}
+        {renderTable(assignedActive, "No tienes reclamos pendientes asignados.", false)}
       </div>
 
       {/* Section 2: Assigned to Me (History) - Important for Operatives */}
@@ -186,7 +186,7 @@ export const TicketList: React.FC<TicketListProps> = ({ currentUser }) => {
                 Historial de Asignaciones (Finalizados)
             </Typography>
         </div>
-        {renderTable(assignedHistory, "No tienes tickets finalizados recientemente.", false)}
+        {renderTable(assignedHistory, "No tienes reclamos finalizados recientemente.", false)}
       </div>
 
       <Divider className="my-8" />
@@ -198,7 +198,7 @@ export const TicketList: React.FC<TicketListProps> = ({ currentUser }) => {
                 Mis Solicitudes Creadas
             </Typography>
         </div>
-        {renderTable(myRequests, "No has creado ninguna solicitud.", true)}
+        {renderTable(myRequests, "No has creado ningún reclamo.", true)}
       </div>
 
     </div>
