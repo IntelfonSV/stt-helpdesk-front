@@ -95,7 +95,9 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
       }
     };
 
-    fetchData();
+    if(token){
+      fetchData();
+    }
   }, [token]);
 
   // Inicializar país según rol

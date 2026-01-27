@@ -13,6 +13,16 @@ interface ApiRequestOptions extends RequestInit {
 }
 
 /**
+ * Función para cerrar sesión y limpiar datos locales
+ */
+export function logout() {
+  console.warn("🔐 Cerrando sesión");
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  window.location.href = "/login";
+}
+
+/**
  * Construye querystring ?a=1&b=2 a partir de un objeto
  */
 function buildQueryString(query?: ApiRequestOptions["query"]): string {
@@ -58,6 +68,12 @@ export async function apiRequest<T>(
    console.log(response)
 
   if (!response.ok) {
+    // Manejar errores de autenticación (token vencido)
+    if (response.status === 401 || response.status === 403) {
+      logout();
+      throw new Error("Sesión expirada. Por favor inicia sesión nuevamente.");
+    }
+
     // Aquí puedes centralizar manejo de errores, log, etc.
     const text = await response.text();
     throw new Error(

@@ -68,11 +68,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
         <div className="p-8 text-center bg-white border-b border-gray-100">
           <div className="flex justify-center mb-6">
-            <Logo variant="dark" className="scale-125" />
+            {/* <Logo variant="dark" className="scale-125" /> */}
           </div>
           <h2 className="text-2xl font-bold text-[#1e242b]">Bienvenido</h2>
           <p className="text-gray-500 mt-2 text-sm">
-            Ingrese sus credenciales para acceder al Service Desk.
+            Ingrese sus credenciales para acceder al gestor de Reclamos.
           </p>
         </div>
 
