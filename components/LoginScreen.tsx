@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { TextField, Button, Alert, CircularProgress } from "@mui/material";
 import { Logo } from "./Logo";
+import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { apiRequest } from "@/lib/apiClient";
 interface LoginScreenProps {
   onLogin: (email: string, token?: string) => void;
@@ -22,6 +23,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +61,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       setLoading(false);
     }
   };
+
+  const handleShowForgotPassword = () => {
+    setShowForgotPassword(true);
+    setError("");
+  };
+
+  const handleBackToLogin = () => {
+    setShowForgotPassword(false);
+    setError("");
+  };
+
+  if (showForgotPassword) {
+    return <ForgotPasswordScreen onBackToLogin={handleBackToLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -120,6 +136,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               "Ingresar al Sistema"
             )}
           </Button>
+
+          <div className="text-center">
+            <Button
+              variant="text"
+              color="primary"
+              onClick={handleShowForgotPassword}
+              sx={{
+                textTransform: "none",
+                color: "#1e242b",
+                fontSize: "0.875rem",
+              }}
+            >
+              ¿Olvidaste tu contraseña?
+            </Button>
+          </div>
 
           <div className="text-center mt-4">
             <div className="text-xs text-gray-400">
