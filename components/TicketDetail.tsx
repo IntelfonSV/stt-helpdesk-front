@@ -22,11 +22,56 @@ import {
   Edit,
   AlertCircle,
   Save,
+  Download,
+  File,
+  Image,
+  FileText,
+  Video,
+  Music,
+  Archive,
 } from "lucide-react";
 import { TicketStatus, User } from "../types";
 import { formatDate } from "../utils";
 import { apiRequest } from "../lib/apiClient";
 import EmailHelper from "./helpers/EmailHelper";
+
+interface Attachment {
+  id: number;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: number;
+  createdAt: string;
+}
+
+interface Ticket {
+  id: string;
+  subject: string;
+  description: string;
+  status: TicketStatus;
+  priority: string;
+  entryDate: string;
+  dueDate: string;
+  requesterId: number;
+  assigneeId: number;
+  country: string;
+  area: {
+    id: number;
+    name: string;
+  };
+  requester: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  assignee: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  attachments?: Attachment[];
+}
 
 interface TicketDetailProps {
   currentUser: User | null;
@@ -44,6 +89,83 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         setTicket(res);
       }
     );
+  };
+
+  // Helper function to get file icon based on MIME type
+  const getFileIcon = (mimeType: string) => {
+    if (mimeType.startsWith('image/')) {
+      return <Image className="h-5 w-5 text-green-500" />;
+    } else if (mimeType.startsWith('video/')) {
+      return <Video className="h-5 w-5 text-purple-500" />;
+    } else if (mimeType.startsWith('audio/')) {
+      return <Music className="h-5 w-5 text-blue-500" />;
+    } else if (mimeType.includes('pdf')) {
+      return <FileText className="h-5 w-5 text-red-500" />;
+    } else if (mimeType.includes('document') || mimeType.includes('word')) {
+      return <FileText className="h-5 w-5 text-blue-600" />;
+    } else if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('xlsx') || mimeType.includes('xls')) {
+      return <FileText className="h-5 w-5 text-green-600" />;
+    } else if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) {
+      return <Archive className="h-5 w-5 text-yellow-600" />;
+    } else if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) {
+      return <FileText className="h-5 w-5 text-orange-500" />;
+    } else if (mimeType.includes('text')) {
+      return <FileText className="h-5 w-5 text-gray-600" />;
+    } else {
+      return <File className="h-5 w-5 text-gray-400" />;
+    }
+  };
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Handle file download
+  const handleDownloadFile = async (attachment: Attachment) => {
+    try {
+      // API_BASE_URL already includes /api/v1/, so just add the endpoint
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.16.1.68:3001/api/v1';
+      const response = await fetch(`${API_BASE_URL}/tickets/attachments/${attachment.id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al descargar el archivo');
+      }
+
+      const blob = await response.blob();
+      console.log('Blob descargado:', {
+        size: blob.size,
+        type: blob.type
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      console.log('URL creada:', url);
+      
+      // Para imágenes: abrir en nueva pestaña
+      if (attachment.mimeType.startsWith('image/')) {
+        window.open(url, '_blank');
+      } else {
+        // Para otros archivos: descargar
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = attachment.originalName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+      console.error('Error descargando archivo:', error);
+      alert('Error al descargar el archivo. Inténtelo de nuevo.');
+    }
   };
 
   useEffect(() => {
@@ -317,6 +439,54 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
               {ticket.description || "Sin descripción detallada."}
             </Typography>
           </Paper>
+
+          {/* Attachments Section */}
+          {ticket.attachments && ticket.attachments.length > 0 && (
+            <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl mb-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
+              <Typography
+                variant="h6"
+                className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
+              >
+                <File size={20} className="text-[#e51b24] drop-shadow-sm" />
+                <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">Archivos Adjuntos</span>
+                <Chip 
+                  label={ticket.attachments.length} 
+                  size="small" 
+                  variant="outlined" 
+                  className="ml-2 text-xs"
+                />
+              </Typography>
+              <div className="space-y-3">
+                {ticket.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors duration-150"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {getFileIcon(attachment.mimeType)}
+                      <div>
+                        <p className="font-medium text-sm text-gray-900">
+                          {attachment.originalName}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(attachment.size)} • {formatDate(attachment.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<Download size={16} />}
+                      onClick={() => handleDownloadFile(attachment)}
+                      className="text-[#e51b24] border-[#e51b24] hover:bg-[#e51b24] hover:text-white transition-colors duration-200"
+                    >
+                      Descargar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Paper>
+          )}
 
           {/* Actions / Tracking Log */}
           <div className="space-y-6">

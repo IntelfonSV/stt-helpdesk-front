@@ -8,7 +8,7 @@ import {
   Typography,
   CircularProgress,
 } from "@mui/material";
-import { Save, CheckCircle2 } from "lucide-react";
+import { Save, CheckCircle2, Upload, X, File } from "lucide-react";
 import { TicketPriority, User, TicketArea, TicketStatus } from "../types";
 
 import { calculateSLA } from "../utils";
@@ -29,6 +29,32 @@ interface Area {
   name: string;
 }
 
+// File validation constants
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_FILE_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/zip': ['.zip'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'audio/mpeg': ['.mp3'],
+  'audio/wav': ['.wav'],
+  'video/mp4': ['.mp4'],
+};
+
+const FORBIDDEN_EXTENSIONS = ['.exe'];
+
+interface UploadedFile {
+  file: File;
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+}
+
 export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -44,9 +70,87 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [fileError, setFileError] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
 
   // Helper para obtener string del país
   const getCountryName = (c: any): string => (typeof c === "string" ? c : c?.country_name || "");
+
+  // File validation functions
+  const validateFile = (file: File): string | null => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return `El archivo ${file.name} excede el tamaño máximo de 10MB`;
+    }
+
+    // Check forbidden extensions
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (FORBIDDEN_EXTENSIONS.includes(fileExtension)) {
+      return `El archivo ${file.name} tiene un formato no permitido`;
+    }
+
+    // Check allowed file types
+    const isAllowed = Object.values(ALLOWED_FILE_TYPES).flat().includes(fileExtension);
+    if (!isAllowed) {
+      return `El archivo ${file.name} tiene un formato no permitido. Formatos permitidos: PDF, Word, Excel, ZIP, PNG, JPG, MP3, WAV, MP4`;
+    }
+
+    return null;
+  };
+
+  const handleFileUpload = (files: FileList | null) => {
+    if (!files) return;
+
+    const newFiles: UploadedFile[] = [];
+    const errors: string[] = [];
+
+    Array.from(files).forEach((file) => {
+      const validationError = validateFile(file);
+      if (validationError) {
+        errors.push(validationError);
+      } else {
+        newFiles.push({
+          file,
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        });
+      }
+    });
+
+    if (errors.length > 0) {
+      setFileError(errors.join('. '));
+    } else {
+      setFileError('');
+    }
+
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const removeFile = (id: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+    if (uploadedFiles.length <= 1) {
+      setFileError('');
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    handleFileUpload(e.dataTransfer.files);
+  };
 
   // Países disponibles según el usuario
   const availableCountries = useMemo(() => {
@@ -126,23 +230,43 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
     setError("");
 
     try {
-      const payload = {
-        subject,
-        /*type, // NUEVO: lo estás enviando al backend*/
-        //areaId: area, // Enviar ID en lugar de nombre
-        priority,
-        description, // NUEVO: detalle separado del asunto
-        requesterId: currentUser.id,
-        assigneeId: assignee,
-        country,
-        entryDate,
-        dueDate: new Date(dueDate).toISOString(),
-        status: TicketStatus.IN_PROGRESS,
-      };
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // Add ticket data
+      formData.append('subject', subject);
+      formData.append('priority', priority);
+      formData.append('description', description);
+      formData.append('requesterId', currentUser.id.toString());
+      formData.append('assigneeId', assignee);
+      formData.append('country', country);
+      formData.append('entryDate', entryDate);
+      formData.append('dueDate', new Date(dueDate).toISOString());
+      formData.append('status', TicketStatus.IN_PROGRESS);
+
+      // Add files - use standard approach
+      uploadedFiles.forEach((uploadedFile) => {
+        formData.append('files', uploadedFile.file);
+      });
+
+      // Debug: Log FormData contents
+      console.log('Uploading files:', uploadedFiles.length);
+      console.log('FormData contents:');
+      for (let [key, value] of formData.entries()) {
+        if (value && typeof value === 'object' && 'name' in value && 'size' in value) {
+          console.log(key, 'File:', value.name, value.size, value.type);
+        } else {
+          console.log(key, value);
+        }
+      }
 
       const res = await apiRequest<CreateTicketResponse>("/tickets", "POST", {
         authToken: token,
-        body: payload,
+        body: formData,
+        headers: {
+          // Don't set Content-Type header when using FormData
+          // Let the browser set it with the correct boundary
+        },
       });
 
       notify();
@@ -193,6 +317,8 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
     setAssignee("");
     setCreatedTicketId("");
     setIsSuccess(false);
+    setUploadedFiles([]);
+    setFileError("");
     // Se mantiene el país actual
   };
 
@@ -207,7 +333,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
     const availableAssignees = users?.filter(
     (u: any) =>
       u.receivableFrom.includes(`${currentUser.id}`) && 
-      getCountryName(u.country.country_name) === country &&
+      getCountryName(u.country) === country &&
       (area ? u.area.id == area : false)
   );
 
@@ -336,6 +462,87 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               placeholder="Describa detalladamente la tarea o problema..."
               disabled={isSubmitting || loading}
             />
+
+            {/* File Upload Section */}
+            <div className="space-y-3">
+              <Typography variant="subtitle2" className="text-[#1e242b] font-medium">
+                Archivos Adjuntos
+              </Typography>
+              
+              {/* Drag & Drop Area */}
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  isDragging 
+                    ? 'border-blue-400 bg-blue-50' 
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <Upload className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                <p className="text-sm text-gray-600 mb-2">
+                  Arrastra archivos aquí o{' '}
+                  <label className="text-blue-600 hover:text-blue-500 cursor-pointer">
+                    haz clic para seleccionar
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e.target.files)}
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.mp3,.wav,.mp4"
+                    />
+                  </label>
+                </p>
+                <p className="text-xs text-gray-500">
+                  Formatos permitidos: PDF, Word, Excel, ZIP, PNG, JPG, MP3, WAV, MP4 (Máx. 10MB por archivo)
+                </p>
+              </div>
+
+              {/* File Error Display */}
+              {fileError && (
+                <Alert severity="error" className="mt-2">
+                  {fileError}
+                </Alert>
+              )}
+
+              {/* Uploaded Files List */}
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-2">
+                  <Typography variant="subtitle2" className="text-[#1e242b]">
+                    Archivos seleccionados ({uploadedFiles.length})
+                  </Typography>
+                  {uploadedFiles.map((uploadedFile) => (
+                    <div
+                      key={uploadedFile.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <File className="h-5 w-5 text-gray-400" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {uploadedFile.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="small"
+                        variant="text"
+                        color="error"
+                        onClick={() => removeFile(uploadedFile.id)}
+                        disabled={isSubmitting}
+                        startIcon={<X className="h-4 w-4" />}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/*
             <TextField
@@ -475,7 +682,11 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
               }
               sx={{ backgroundColor: "#e51b24", height: "56px" }}
             >
-              {isSubmitting ? "Procesando..." : "Crear Ticket"}
+              {isSubmitting ? (
+                <span>Procesando...</span>
+              ) : (
+                "Crear Ticket"
+              )}
             </Button>
           </div>
         </form>

@@ -50,9 +50,13 @@ export async function apiRequest<T>(
   const url = `${API_BASE_URL}${path}${buildQueryString(query)}`;
 
   const finalHeaders: HeadersInit = {
-    "Content-Type": "application/json",
     ...(headers || {}),
   };
+
+  // Only set Content-Type for non-FormData requests
+  if (!(body instanceof FormData)) {
+    finalHeaders["Content-Type"] = "application/json";
+  }
 
   if (authToken) {
     finalHeaders["Authorization"] = `Bearer ${authToken}`;
@@ -61,7 +65,7 @@ export async function apiRequest<T>(
   const response = await fetch(url, {
     method,
     headers: finalHeaders,
-    body: body ? JSON.stringify(body) : undefined,
+    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
     ...rest,
   });
 
