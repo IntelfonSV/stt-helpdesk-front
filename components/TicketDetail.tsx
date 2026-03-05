@@ -135,7 +135,10 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       mimeType.includes("tar")
     ) {
       return <Archive className="h-5 w-5 text-yellow-600" />;
-    } else if (mimeType.includes("powerpoint") || mimeType.includes("presentation")) {
+    } else if (
+      mimeType.includes("powerpoint") ||
+      mimeType.includes("presentation")
+    ) {
       return <FileText className="h-5 w-5 text-orange-500" />;
     } else if (mimeType.includes("text")) {
       return <FileText className="h-5 w-5 text-gray-600" />;
@@ -442,6 +445,20 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     }
   };
 
+  // ✅ Helper local: detect closed status for UI blocks
+  const isClosedUIStatus = (status: any) => {
+    return (
+      status === TicketStatus.RESOLVED ||
+      status === TicketStatus.CANCELLED ||
+      status === "Finalizado" ||
+      status === "Cancelado"
+    );
+  };
+
+  // ✅ Closed date to display (prefer completionDate)
+  const closedAtIso =
+    ticket?.completionDate || ticket?.updatedAt || (ticket?.actions?.[0]?.date ?? null);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
@@ -561,12 +578,6 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
               </Typography>
             </div>
 
-            {/* 
-                   Form Visibility Logic:
-                   Only show if the CURRENT confirmed status is not resolved/cancelled.
-                   This allows users to select 'Finalizado' in the dropdown (pendingStatus) 
-                   without the form disappearing immediately.
-                */}
             {canAddTracking &&
               currentStatus !== TicketStatus.RESOLVED &&
               currentStatus !== TicketStatus.CANCELLED && (
@@ -616,7 +627,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                       Registrar y Guardar
                     </Button>
                   </div>
-                  {/* UX Hint: Show warning if user selected a closing status but hasn't saved yet */}
+
                   {(pendingStatus === TicketStatus.RESOLVED ||
                     pendingStatus === TicketStatus.CANCELLED) && (
                     <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-gradient-to-r from-orange-50 to-yellow-50 p-3 rounded-lg border border-orange-200 shadow-sm">
@@ -652,7 +663,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                 >
                   <div className="flex-1">
                     <div className="flex justify-between items-baseline">
-                      <Avatar sx={{ width: 32, height: 32, className: "shadow-sm" }}>
+                      <Avatar
+                        sx={{ width: 32, height: 32, className: "shadow-sm" }}
+                      >
                         {action.userNameSnapshot?.charAt(0) || "U"}
                       </Avatar>
 
@@ -708,6 +721,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                     </p>
                   </div>
                 </div>
+
                 <div className="flex items-start sm:items-center gap-3">
                   <Calendar size={18} className="text-gray-400" />
                   <div className="w-full">
@@ -715,6 +729,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                     <p className="font-medium text-sm">
                       {formatDate(ticket.entryDate)}
                     </p>
+
                     <div className="mt-2 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
@@ -726,8 +741,24 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                         {elapsedTime}
                       </p>
                     </div>
+
+                    {/* ✅ NUEVO: Solo si está cerrado/finalizado/cancelado, mostrar fecha/hora de cierre */}
+                    {isClosedUIStatus(ticket.status) && closedAtIso && (
+                      <div className="mt-2 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">                        
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <p className="text-xs font-bold text-green-700">
+                            Fecha de cierre:
+                          </p>
+                        </div>
+                        <p className="text-sm font-bold text-green-900 mt-1">
+                          {formatDate(closedAtIso)}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
+
                 <div className="flex items-start gap-3">
                   <AlertCircle size={18} className="text-[#e51b24] mt-1" />
                   <div className="w-full">
@@ -784,7 +815,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   </Avatar>
                   <div>
                     <p className="text-xs text-gray-500">Solicitante</p>
-                    <p className="font-medium text-sm">{ticket.requester.name}</p>
+                    <p className="font-medium text-sm">
+                      {ticket.requester.name}
+                    </p>
                     <p className="text-xs text-gray-400">{ticket.country}</p>
                   </div>
                 </div>
@@ -794,7 +827,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   </Avatar>
                   <div>
                     <p className="text-xs text-gray-500">Responsable</p>
-                    <p className="font-medium text-sm">{ticket.assignee.name}</p>
+                    <p className="font-medium text-sm">
+                      {ticket.assignee.name}
+                    </p>
                     <p className="text-xs text-gray-400">{ticket.area as any}</p>
                   </div>
                 </div>
