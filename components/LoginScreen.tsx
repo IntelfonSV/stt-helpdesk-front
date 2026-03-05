@@ -3,6 +3,7 @@ import { TextField, Button, Alert, CircularProgress } from "@mui/material";
 import { Logo } from "./Logo";
 import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { apiRequest } from "@/lib/apiClient";
+
 interface LoginScreenProps {
   onLogin: (email: string, token?: string) => void;
 }
@@ -18,6 +19,50 @@ interface LoginResponse {
   avatar?: string;
 }
 
+type BackendValidationError = {
+  msg?: string;
+  message?: string;
+  param?: string;
+};
+
+function extractApiErrorMessage(err: unknown): string {
+  const anyErr = err as any;
+
+  // Compat: axios-like (err.response) o custom (err.status/err.data)
+  const status = anyErr?.status ?? anyErr?.response?.status;
+  const data = anyErr?.data ?? anyErr?.response?.data;
+
+  // express-validator: { message: "Bad Request", errors: [...] }
+  if (status === 400 && data && Array.isArray(data.errors)) {
+    const msgs = (data.errors as BackendValidationError[])
+      .map((e) => e?.msg || e?.message)
+      .filter(Boolean);
+
+    if (msgs.length) return msgs.join(" • ");
+    if (typeof data.message === "string") return data.message;
+    return "Bad Request (400).";
+  }
+
+  // Error estándar backend: { message: "..." }
+  if (data?.message && typeof data.message === "string") return data.message;
+
+  // Alternativa: { error: "..." }
+  if (data?.error && typeof data.error === "string") return data.error;
+
+  // Error object
+  if (anyErr?.message && typeof anyErr.message === "string") return anyErr.message;
+
+  // Status sin body
+  if (typeof status === "number") {
+    if (status === 401) return "Credenciales inválidas.";
+    if (status === 403) return "Acceso denegado.";
+    if (status >= 500) return `Error del servidor (${status}).`;
+    return `Error HTTP (${status}).`;
+  }
+
+  return "Error de conexión con el servidor o respuesta inválida.";
+}
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,12 +76,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     setError("");
 
     try {
-      // llamada real a tu API
       const data = await apiRequest<LoginResponse>("/auth/login", "POST", {
-        body: {
-          email, // o email, según tu backend
-          password,
-        },
+        body: { email, password },
       });
 
       const user = {
@@ -50,14 +91,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
       console.log(user);
 
-      // aquí podrías guardar token en localStorage / context, etc.
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(user));
 
       onLogin(data.email, data.token);
     } catch (err) {
       console.error(err);
-      setError("Credenciales inválidas o error de conexión con el servidor.");
+      setError(extractApiErrorMessage(err));
+    } finally {
       setLoading(false);
     }
   };
@@ -78,7 +119,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decoration */}
       <div className="absolute top-0 left-0 w-full h-1/2 bg-[#1e242b] skew-y-3 origin-top-left -z-10 transform -translate-y-20"></div>
 
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
@@ -154,16 +194,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
           <div className="text-center mt-4">
             <div className="text-xs text-gray-400">
-              {/* <p>
-                Prueba con: <strong>rcanto@grupostt.com</strong> (Admin)
-              </p>
-              <p>
-                <strong>jefesv@grupostt.com</strong> o{" "}
-                <strong>jefegt@grupostt.com</strong> (Jefes)
-              </p>
-              <p>
-                <strong>operativo@grupostt.com</strong> (Operativo)
-              </p> */}
               <p className="mt-2">© 2025 Grupo STT</p>
             </div>
           </div>
