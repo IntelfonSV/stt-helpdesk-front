@@ -90,7 +90,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [ticketAreas, setTicketAreas] = useState<{id: number; name: string}[]>([]);
+  const [ticketAreas, setTicketAreas] = useState<
+    { id: number; name: string }[]
+  >([]);
   const [countries, setCountries] = useState<string[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -101,19 +103,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         setLoading(true);
         setError("");
 
-        const [ticketsRes, usersRes, areasRes, countriesRes, categoriesRes] = await Promise.all([
-          apiRequest<Ticket[]>("/tickets", "GET", { authToken: token }),
-          apiRequest<User[]>("/users", "GET", { authToken: token }),
-          apiRequest<{id: number; name: string}[]>("/areas", "GET", { authToken: token }),
-          apiRequest<string[]>("/countries", "GET", { authToken: token }),
-          apiRequest<Category[]>("/categorias", "GET", { authToken: token }),
-          console.log(
-            "Dashboard stats:",
-            await apiRequest<string[]>("/dashboard/stats", "GET", {
+        const [ticketsRes, usersRes, areasRes, countriesRes, categoriesRes] =
+          await Promise.all([
+            apiRequest<Ticket[]>("/tickets", "GET", { authToken: token }),
+            apiRequest<User[]>("/users", "GET", { authToken: token }),
+            apiRequest<{ id: number; name: string }[]>("/areas", "GET", {
               authToken: token,
-            })
-          ),
-        ]);
+            }),
+            apiRequest<string[]>("/countries", "GET", { authToken: token }),
+            apiRequest<Category[]>("/categorias", "GET", { authToken: token }),
+            console.log(
+              "Dashboard stats:",
+              await apiRequest<string[]>("/dashboard/stats", "GET", {
+                authToken: token,
+              }),
+            ),
+          ]);
 
         setTickets(ticketsRes);
         console.log("Tickets:", ticketsRes);
@@ -141,7 +146,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       if (currentUser.role === "admin") return true;
       //if (currentUser.role === "agent") return t.assignee.country.id === currentUser.country.id;
       // Agent sees only their country
-      return t.assignee.country.id == (typeof currentUser.country === 'string' ? currentUser.country : currentUser.country.id);
+      return (
+        t.assignee.country.id ==
+        (typeof currentUser.country === "string"
+          ? currentUser.country
+          : currentUser.country.id)
+      );
     });
   }, [currentUser, tickets]);
 
@@ -152,20 +162,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   // }, [countries]);
 
   // Filter areas based on selected category
+  // Filter areas based on selected category (robusto usando tickets; no depende de categories.areas)
   const filteredAreas = useMemo(() => {
-    if (categoryFilter === "All") {
-      return ticketAreas;
-    }
-    return ticketAreas.filter(area => {
-      const category = categories.find(cat => cat.id === Number(categoryFilter));
-      return category && category.areas.some(catArea => catArea.id === area.id);
-    });
-  }, [categoryFilter, ticketAreas, categories]);
+    if (categoryFilter === "All") return ticketAreas;
+
+    const catId = Number(categoryFilter);
+
+    return ticketAreas.filter((a) =>
+      accessibleTickets.some(
+        (t) =>
+          t.assignee?.area?.id === a.id &&
+          t.assignee?.area?.categoriaId === catId,
+      ),
+    );
+  }, [categoryFilter, ticketAreas, accessibleTickets]);
 
   // Reset area filter when category changes to ensure validity
   useEffect(() => {
     if (categoryFilter !== "All") {
-      const isCurrentAreaValid = filteredAreas.some(area => area.name === areaFilter) || areaFilter === "All";
+      const isCurrentAreaValid =
+        filteredAreas.some((area) => area.name === areaFilter) ||
+        areaFilter === "All";
       if (!isCurrentAreaValid) {
         setAreaFilter("All");
       }
@@ -175,9 +192,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   // 2. Filter Logic (Applies to Metrics and Total Table, NOT Pending Table totally)
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((t) => {
-      if (categoryFilter !== "All" && t.assignee?.area?.categoriaId !== Number(categoryFilter)) return false;
-      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) return false;
-      if (countryFilter !== "All" && t.assignee.country.id !== Number(countryFilter)) return false;
+      if (
+        categoryFilter !== "All" &&
+        t.assignee?.area?.categoriaId !== Number(categoryFilter)
+      )
+        return false;
+      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter)
+        return false;
+      if (
+        countryFilter !== "All" &&
+        t.assignee.country.id !== Number(countryFilter)
+      )
+        return false;
       if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter)
         return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter)
@@ -201,7 +227,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     priorityFilter,
     statusFilter,
     dateRange,
-    categoryFilter
+    categoryFilter,
   ]);
 
   // 3. KPI Calculations
@@ -209,23 +235,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     const totalAssigned = filteredTickets.length;
     console.log("filteredTickets length:", filteredTickets.length);
     const finished = filteredTickets.filter(
-      (t) => t.status === TicketStatus.RESOLVED
+      (t) => t.status === TicketStatus.RESOLVED,
     ).length;
     const unfinished = filteredTickets.filter(
       (t) =>
         t.status !== TicketStatus.RESOLVED &&
-        t.status !== TicketStatus.CANCELLED
+        t.status !== TicketStatus.CANCELLED,
     ).length;
     const inTransit = filteredTickets.filter(
-      (t) => t.status === TicketStatus.IN_PROGRESS
+      (t) => t.status === TicketStatus.IN_PROGRESS,
     ).length;
     const onHold = filteredTickets.filter(
-      (t) => t.status === TicketStatus.WAITING
+      (t) => t.status === TicketStatus.WAITING,
     ).length;
 
     const asignadas = filteredTickets.filter(
       (t) =>
-        t.status !== TicketStatus.CANCELLED && t.status !== TicketStatus.WAITING
+        t.status !== TicketStatus.CANCELLED &&
+        t.status !== TicketStatus.WAITING,
     ).length;
 
     console.log("asignadas:", asignadas);
@@ -241,17 +268,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     }).length;
 
     const activeForCalc = filteredTickets.filter(
-      (t) => t.status !== TicketStatus.CANCELLED
+      (t) => t.status !== TicketStatus.CANCELLED,
     );
     const overdueActive = activeForCalc.filter(
-      (t) => getDaysOverdue(t.dueDate) > 0
+      (t) => getDaysOverdue(t.dueDate) > 0,
     );
     console.log("overdueActive:", overdueActive);
     console.log(
       "activeForCalc:",
       activeForCalc.length,
       "overdueActive:",
-      overdueActive.length
+      overdueActive.length,
     );
     // const compliance = activeForCalc.length > 0
     //   ? ((activeForCalc.length - overdueActive.length) / activeForCalc.length) * 100
@@ -274,23 +301,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     const areas = ticketAreas;
     return areas
       .map((area) => {
-        const areaTickets = filteredTickets.filter((t) => t.assignee?.area?.name === area.name);
+        const areaTickets = filteredTickets.filter(
+          (t) => t.assignee?.area?.name === area.name,
+        );
         return {
           name: area.name,
           Finalizadas: areaTickets.filter(
-            (t) => t.status === TicketStatus.RESOLVED
+            (t) => t.status === TicketStatus.RESOLVED,
           ).length,
           Pendientes: areaTickets.filter(
             (t) =>
               t.status !== TicketStatus.RESOLVED &&
-              t.status !== TicketStatus.CANCELLED
+              t.status !== TicketStatus.CANCELLED,
           ).length,
         };
       })
       .filter((d) => d.Finalizadas > 0 || d.Pendientes > 0);
   }, [filteredTickets, ticketAreas]);
-
-
 
   // 5. Table Data (Specific Rules)
   // Pending Tasks: All accessible tickets that are NOT resolved/cancelled.
@@ -304,11 +331,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       )
         return false;
       // Apply non-date filters
-      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) return false;
+      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter)
+        return false;
       // ✅ correcto según tu payload
-      if (categoryFilter !== "All" && t.assignee?.area?.categoriaId !== Number(categoryFilter)) return false; 
+      if (
+        categoryFilter !== "All" &&
+        t.assignee?.area?.categoriaId !== Number(categoryFilter)
+      )
+        return false;
       // ✅ comparar por id
-      if (countryFilter !== "All" && t.assignee?.country?.id !== Number(countryFilter)) return false;
+      if (
+        countryFilter !== "All" &&
+        t.assignee?.country?.id !== Number(countryFilter)
+      )
+        return false;
       if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter)
         return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter)
@@ -369,10 +405,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
                 ticket.status === TicketStatus.RESOLVED
                   ? "success"
                   : ticket.status === TicketStatus.CANCELLED
-                  ? "error"
-                  : ticket.status === TicketStatus.WAITING
-                  ? "default"
-                  : "primary"
+                    ? "error"
+                    : ticket.status === TicketStatus.WAITING
+                      ? "default"
+                      : "primary"
               }
             />
           </TableCell>
@@ -523,9 +559,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
             </TextField>
           </Grid>
 
-
-
-
           <Grid item={true} xs={12} md={2}>
             <TextField
               select
@@ -559,13 +592,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               InputProps={{ disableUnderline: true }}
             >
               <MenuItem value="All">Todos</MenuItem>
-              {users?.length > 0 && users
-                .filter((u) => u.role !== "admin")
-                .map((u) => (
-                  <MenuItem key={u.id} value={u.id}>
-                    {u.name}
-                  </MenuItem>
-                ))}
+              {users?.length > 0 &&
+                users
+                  .filter((u) => u.role !== "admin")
+                  .map((u) => (
+                    <MenuItem key={u.id} value={u.id}>
+                      {u.name}
+                    </MenuItem>
+                  ))}
             </TextField>
           </Grid>
           <Grid item={true} xs={12} md={2}>
@@ -735,13 +769,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           <Table size="small">
             <TableHead className="bg-[#e51b24]">
               <TableRow>
-                <th className="text-white font-bold">
-                  ID Ticket
-                </th>
-                <th className="text-white font-bold" >País</th>
-                <th className="text-white font-bold">
-                  Prioridad
-                </th>
+                <th className="text-white font-bold">ID Ticket</th>
+                <th className="text-white font-bold">País</th>
+                <th className="text-white font-bold">Prioridad</th>
                 <th className="text-white font-bold">Área</th>
                 <th className="text-white font-bold px-2 max-w-xs truncate">
                   Responsable
