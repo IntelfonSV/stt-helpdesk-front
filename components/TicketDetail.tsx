@@ -45,6 +45,17 @@ interface Attachment {
   createdAt: string;
 }
 
+interface TicketAction {
+  id: number;
+  ticketId: string;
+  userId: number;
+  userNameSnapshot?: string;
+  action: string;
+  date: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface Ticket {
   id: string;
   subject: string;
@@ -53,6 +64,7 @@ interface Ticket {
   priority: string;
   entryDate: string;
   dueDate: string;
+  completionDate?: string | null;
   requesterId: number;
   assigneeId: number;
   country: string;
@@ -69,8 +81,14 @@ interface Ticket {
     id: number;
     name: string;
     email: string;
+    area?: {
+      id: number;
+      name: string;
+    };
   };
   attachments?: Attachment[];
+  actions: TicketAction[];
+  updatedAt?: string;
 }
 
 interface TicketDetailProps {
@@ -81,7 +99,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
   const { id } = useParams();
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const token = localStorage.getItem("token") || undefined;
-  const { emailAsignado, emailSeguimiento, emailFinalizado, emailCancelado } = EmailHelper();
+  const { emailAsignado, emailSeguimiento, emailFinalizado, emailCancelado } =
+    EmailHelper();
 
   const getTicket = () => {
     apiRequest<Ticket>(`/tickets/${id}`, "GET", { authToken: token }).then(
@@ -93,23 +112,32 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
   // Helper function to get file icon based on MIME type
   const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) {
+    if (mimeType.startsWith("image/")) {
       return <Image className="h-5 w-5 text-green-500" />;
-    } else if (mimeType.startsWith('video/')) {
+    } else if (mimeType.startsWith("video/")) {
       return <Video className="h-5 w-5 text-purple-500" />;
-    } else if (mimeType.startsWith('audio/')) {
+    } else if (mimeType.startsWith("audio/")) {
       return <Music className="h-5 w-5 text-blue-500" />;
-    } else if (mimeType.includes('pdf')) {
+    } else if (mimeType.includes("pdf")) {
       return <FileText className="h-5 w-5 text-red-500" />;
-    } else if (mimeType.includes('document') || mimeType.includes('word')) {
+    } else if (mimeType.includes("document") || mimeType.includes("word")) {
       return <FileText className="h-5 w-5 text-blue-600" />;
-    } else if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('xlsx') || mimeType.includes('xls')) {
+    } else if (
+      mimeType.includes("sheet") ||
+      mimeType.includes("excel") ||
+      mimeType.includes("xlsx") ||
+      mimeType.includes("xls")
+    ) {
       return <FileText className="h-5 w-5 text-green-600" />;
-    } else if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) {
+    } else if (
+      mimeType.includes("zip") ||
+      mimeType.includes("rar") ||
+      mimeType.includes("tar")
+    ) {
       return <Archive className="h-5 w-5 text-yellow-600" />;
-    } else if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) {
+    } else if (mimeType.includes("powerpoint") || mimeType.includes("presentation")) {
       return <FileText className="h-5 w-5 text-orange-500" />;
-    } else if (mimeType.includes('text')) {
+    } else if (mimeType.includes("text")) {
       return <FileText className="h-5 w-5 text-gray-600" />;
     } else {
       return <File className="h-5 w-5 text-gray-400" />;
@@ -118,43 +146,47 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
   // Format file size
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
   // Handle file download
   const handleDownloadFile = async (attachment: Attachment) => {
     try {
       // API_BASE_URL already includes /api/v1/, so just add the endpoint
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.16.1.68:3001/api/v1';
-      const response = await fetch(`${API_BASE_URL}/tickets/attachments/${attachment.id}/download`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const API_BASE_URL =
+        import.meta.env.VITE_API_URL || "http://172.16.1.68:3001/api/v1";
+      const response = await fetch(
+        `${API_BASE_URL}/tickets/attachments/${attachment.id}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Error al descargar el archivo');
+        throw new Error("Error al descargar el archivo");
       }
 
       const blob = await response.blob();
-      console.log('Blob descargado:', {
+      console.log("Blob descargado:", {
         size: blob.size,
-        type: blob.type
+        type: blob.type,
       });
 
       const url = window.URL.createObjectURL(blob);
-      console.log('URL creada:', url);
-      
+      console.log("URL creada:", url);
+
       // Para imágenes: abrir en nueva pestaña
-      if (attachment.mimeType.startsWith('image/')) {
-        window.open(url, '_blank');
+      if (attachment.mimeType.startsWith("image/")) {
+        window.open(url, "_blank");
       } else {
         // Para otros archivos: descargar
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = attachment.originalName;
         document.body.appendChild(a);
@@ -163,8 +195,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         document.body.removeChild(a);
       }
     } catch (error) {
-      console.error('Error descargando archivo:', error);
-      alert('Error al descargar el archivo. Inténtelo de nuevo.');
+      console.error("Error descargando archivo:", error);
+      alert("Error al descargar el archivo. Inténtelo de nuevo.");
     }
   };
 
@@ -201,24 +233,33 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     }
   }, [ticket?.id, ticket]);
 
-  // Update elapsed time counter every second
+  // Update elapsed time counter every second (only for open tickets).
+  // For closed tickets, show elapsed time until completionDate (or updatedAt fallback) and do not keep counting.
   useEffect(() => {
     if (!ticket) return;
 
-    const updateElapsedTime = () => {
-      const now = new Date();
-      const created = new Date(ticket.entryDate);
-      const diff = now.getTime() - created.getTime();
-      
+    const isClosedStatus = (status: any) => {
+      // Keep existing enum checks, and also handle backend strings like "Finalizado"/"Cancelado"
+      return (
+        status === TicketStatus.RESOLVED ||
+        status === TicketStatus.CANCELLED ||
+        status === "Finalizado" ||
+        status === "Cancelado"
+      );
+    };
+
+    const computeElapsedTime = (start: Date, end: Date) => {
+      const diff = end.getTime() - start.getTime();
+
       const seconds = Math.floor(diff / 1000);
       const minutes = Math.floor(seconds / 60);
       const hours = Math.floor(minutes / 60);
       const days = Math.floor(hours / 24);
-      
+
       const remainingHours = hours % 24;
       const remainingMinutes = minutes % 60;
       const remainingSeconds = seconds % 60;
-      
+
       let timeString = "";
       if (days > 0) {
         timeString = `${days}d ${remainingHours}h ${remainingMinutes}m ${remainingSeconds}s`;
@@ -229,8 +270,24 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       } else {
         timeString = `${remainingSeconds}s`;
       }
-      
+
       setElapsedTime(timeString);
+    };
+
+    const created = new Date(ticket.entryDate);
+
+    // If ticket is closed, use completionDate (or updatedAt as fallback) and do not keep counting
+    if (isClosedStatus(ticket.status)) {
+      const endIso = ticket.completionDate || ticket.updatedAt;
+      const end = endIso ? new Date(endIso) : new Date();
+      computeElapsedTime(created, end);
+      return;
+    }
+
+    // If ticket is open, count in real time
+    const updateElapsedTime = () => {
+      const now = new Date();
+      computeElapsedTime(created, now);
     };
 
     updateElapsedTime();
@@ -272,10 +329,10 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       body: { userId: currentUser.id, status: pendingStatus, actionLog },
     }).then((res) => {
       getTicket();
-      
+
       // Send email notification for tracking
       notifyTracking(pendingStatus, actionLog);
-      
+
       // Send email notification for finalization if status is RESOLVED
       if (pendingStatus === TicketStatus.RESOLVED) {
         notifyFinalized();
@@ -302,7 +359,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
   // Email notification functions
   const notifyTracking = async (status: TicketStatus, actionLog: string) => {
     try {
-      await apiRequest('/email/send', 'POST', {
+      await apiRequest("/email/send", "POST", {
         authToken: token,
         body: {
           to: `${ticket?.requester?.email || ""}`,
@@ -314,9 +371,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             fechaSeguimiento: new Date().toISOString(),
             estado: status,
             subject: ticket?.subject || "N/A",
-            accionRealizada: actionLog
-          })
-        }
+            accionRealizada: actionLog,
+          }),
+        },
       });
     } catch (emailErr) {
       console.error("Error enviando correo de seguimiento:", emailErr);
@@ -325,7 +382,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
   const notifyFinalized = async () => {
     try {
-      await apiRequest('/email/send', 'POST', {
+      await apiRequest("/email/send", "POST", {
         authToken: token,
         body: {
           to: `${ticket?.requester?.email || ""}`,
@@ -337,9 +394,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             fechaCierre: new Date().toISOString(),
             diasAtraso: "0", // Calculate if needed
             subject: ticket?.subject || "N/A",
-            resolucion: actionLog || "Ticket finalizado"
-          })
-        }
+            resolucion: actionLog || "Ticket finalizado",
+          }),
+        },
       });
     } catch (emailErr) {
       console.error("Error enviando correo de finalización:", emailErr);
@@ -348,7 +405,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
   const notifyCancelled = async () => {
     try {
-      await apiRequest('/email/send', 'POST', {
+      await apiRequest("/email/send", "POST", {
         authToken: token,
         body: {
           to: `${ticket?.requester?.email || ""}`,
@@ -359,9 +416,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             canceladoPor: currentUser.name,
             fechaCancelacion: new Date().toISOString(),
             subject: ticket?.subject || "N/A",
-            motivoCancelacion: "Ticket cancelado por el solicitante"
-          })
-        }
+            motivoCancelacion: "Ticket cancelado por el solicitante",
+          }),
+        },
       });
     } catch (emailErr) {
       console.error("Error enviando correo de cancelación:", emailErr);
@@ -376,7 +433,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         body: { reason: "Ticket cancelado por el solicitante" },
       }).then(() => {
         getTicket();
-        
+
         // Send email notification for cancellation
         notifyCancelled();
       });
@@ -395,25 +452,28 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         >
           Volver
         </Button>
-            <div className="flex-1">
-              <div className="flex items-start sm:items-center gap-3">
-                <Typography variant="h4" className="font-bold text-[#1e242b] bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
-                  {ticket.id}: {ticket.subject}
-                </Typography>
-                <Chip
-                  label={currentStatus}
-                  color={
-                    currentStatus === TicketStatus.RESOLVED
-                      ? "success"
-                      : currentStatus === TicketStatus.CANCELLED
-                      ? "error"
-                      : "primary"
-                  }
-                  variant="outlined"
-                  className="shadow-sm"
-                />
-              </div>
-            </div>
+        <div className="flex-1">
+          <div className="flex items-start sm:items-center gap-3">
+            <Typography
+              variant="h4"
+              className="font-bold text-[#1e242b] bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent"
+            >
+              {ticket.id}: {ticket.subject}
+            </Typography>
+            <Chip
+              label={currentStatus}
+              color={
+                currentStatus === TicketStatus.RESOLVED
+                  ? "success"
+                  : currentStatus === TicketStatus.CANCELLED
+                  ? "error"
+                  : "primary"
+              }
+              variant="outlined"
+              className="shadow-sm"
+            />
+          </div>
+        </div>
         {/* Cancel Button: Only Requester can cancel */}
         {canCancel && (
           <Button variant="outlined" color="error" onClick={handleCancelTicket}>
@@ -430,7 +490,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
               className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
             >
               <Tag size={20} className="text-[#e51b24] drop-shadow-sm" />
-              <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">Descripción de la Solicitud</span>
+              <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
+                Descripción de la Solicitud
+              </span>
             </Typography>
             <Typography
               variant="body1"
@@ -448,11 +510,13 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                 className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
               >
                 <File size={20} className="text-[#e51b24] drop-shadow-sm" />
-                <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">Archivos Adjuntos</span>
-                <Chip 
-                  label={ticket.attachments.length} 
-                  size="small" 
-                  variant="outlined" 
+                <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
+                  Archivos Adjuntos
+                </span>
+                <Chip
+                  label={ticket.attachments.length}
+                  size="small"
+                  variant="outlined"
                   className="ml-2 text-xs"
                 />
               </Typography>
@@ -469,7 +533,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                           {attachment.originalName}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {formatFileSize(attachment.size)} • {formatDate(attachment.createdAt)}
+                          {formatFileSize(attachment.size)} •{" "}
+                          {formatDate(attachment.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -575,7 +640,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   <p className="text-xs text-gray-500 font-medium">
                     {formatDate(ticket.entryDate)}
                   </p>
-                  <p className="text-sm font-medium text-gray-700">Ticket ingresado al sistema.</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    Ticket ingresado al sistema.
+                  </p>
                 </div>
               </div>
               {ticket.actions.map((action) => (
@@ -583,19 +650,29 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   key={action.id}
                   className="flex gap-4 p-4 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
                 >
-                  {/* <Avatar sx={{ bgcolor: '#1e242b', width: 32, height: 32 }}>{action.user.charAt(0)}</Avatar> */}
                   <div className="flex-1">
                     <div className="flex justify-between items-baseline">
-                  <Avatar sx={{ width: 32, height: 32, className: 'shadow-sm' }}>{action.userNameSnapshot?.charAt(0) || 'U'}</Avatar>
+                      <Avatar sx={{ width: 32, height: 32, className: "shadow-sm" }}>
+                        {action.userNameSnapshot?.charAt(0) || "U"}
+                      </Avatar>
 
-                      <Typography variant="subtitle2" className="font-bold text-gray-800">
+                      <Typography
+                        variant="subtitle2"
+                        className="font-bold text-gray-800"
+                      >
                         {action.userNameSnapshot}
                       </Typography>
-                      <Typography variant="caption" className="text-gray-500 font-medium">
+                      <Typography
+                        variant="caption"
+                        className="text-gray-500 font-medium"
+                      >
                         {formatDate(action.date)}
                       </Typography>
                     </div>
-                    <Typography variant="body2" className="text-gray-700 mt-1 leading-relaxed">
+                    <Typography
+                      variant="body2"
+                      className="text-gray-700 mt-1 leading-relaxed"
+                    >
                       {action.action}
                     </Typography>
                   </div>
@@ -626,7 +703,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
                   <Tag size={18} className="text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-500">Área</p>
-                    <p className="font-medium text-sm">{ticket.assignee?.area?.name}</p>
+                    <p className="font-medium text-sm">
+                      {ticket.assignee?.area?.name}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start sm:items-center gap-3">
@@ -700,23 +779,23 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
               </Typography>
               <div className="space-y-4">
                 <div className="flex items-start sm:items-center gap-3">
-                  <Avatar sx={{ width: 32, height: 32 }}>{ticket.requester?.name?.charAt(0) || 'U'}</Avatar>
+                  <Avatar sx={{ width: 32, height: 32 }}>
+                    {ticket.requester?.name?.charAt(0) || "U"}
+                  </Avatar>
                   <div>
                     <p className="text-xs text-gray-500">Solicitante</p>
-                    <p className="font-medium text-sm">
-                      {ticket.requester.name}
-                    </p>
+                    <p className="font-medium text-sm">{ticket.requester.name}</p>
                     <p className="text-xs text-gray-400">{ticket.country}</p>
                   </div>
                 </div>
                 <div className="flex items-start sm:items-center gap-3">
-                  <Avatar sx={{ width: 32, height: 32, bgcolor: '#e51b24' }}>{ticket.assignee?.name?.charAt(0) || 'U'}</Avatar>
+                  <Avatar sx={{ width: 32, height: 32, bgcolor: "#e51b24" }}>
+                    {ticket.assignee?.name?.charAt(0) || "U"}
+                  </Avatar>
                   <div>
                     <p className="text-xs text-gray-500">Responsable</p>
-                    <p className="font-medium text-sm">
-                      {ticket.assignee.name}
-                    </p>
-                    <p className="text-xs text-gray-400">{ticket.area}</p>
+                    <p className="font-medium text-sm">{ticket.assignee.name}</p>
+                    <p className="text-xs text-gray-400">{ticket.area as any}</p>
                   </div>
                 </div>
               </div>
