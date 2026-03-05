@@ -305,8 +305,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         return false;
       // Apply non-date filters
       if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) return false;
-      if (categoryFilter !== "All" && t.assignee?.area?.category?.id !== Number(categoryFilter)) return false;
-      if (countryFilter !== "All" && t.assignee?.country?.country_name !== countryFilter) return false;
+      // ✅ correcto según tu payload
+      if (categoryFilter !== "All" && t.assignee?.area?.categoriaId !== Number(categoryFilter)) return false; 
+      // ✅ comparar por id
+      if (countryFilter !== "All" && t.assignee?.country?.id !== Number(countryFilter)) return false;
       if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter)
         return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter)
