@@ -143,7 +143,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const accessibleTickets = useMemo(() => {
     return tickets.filter((t) => {
       if (currentUser.role === "admin") return true;
-
       return (
         t.assignee.country.id ==
         (typeof currentUser.country === "string"
@@ -174,7 +173,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       const isCurrentAreaValid =
         filteredAreas.some((area) => area.name === areaFilter) ||
         areaFilter === "All";
-
       if (!isCurrentAreaValid) {
         setAreaFilter("All");
       }
@@ -289,7 +287,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         const areaTickets = filteredTickets.filter(
           (t) => t.assignee?.area?.name === area.name,
         );
-
         return {
           name: area.name,
           Finalizadas: areaTickets.filter(

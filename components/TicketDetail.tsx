@@ -176,8 +176,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       }
 
       const blob = await response.blob();
-
       const url = window.URL.createObjectURL(blob);
+
 
       // Para imágenes: abrir en nueva pestaña
       if (attachment.mimeType.startsWith("image/")) {
