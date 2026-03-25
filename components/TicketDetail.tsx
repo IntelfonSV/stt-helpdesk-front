@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Paper,
@@ -13,6 +13,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Alert,
 } from "@mui/material";
 import {
   ArrowLeft,
@@ -29,6 +30,12 @@ import {
   Video,
   Music,
   Archive,
+  User as UserIcon,
+  CheckCircle2,
+  XCircle,
+  ClipboardList,
+  MessageSquare,
+  Paperclip,
 } from "lucide-react";
 import { TicketStatus, User } from "../types";
 import { formatDate } from "../utils";
@@ -95,80 +102,155 @@ interface TicketDetailProps {
   currentUser: User | null;
 }
 
+const getStatusChipProps = (status: TicketStatus | string) => {
+  if (
+    status === TicketStatus.RESOLVED ||
+    status === "Finalizado"
+  ) {
+    return {
+      color: "success" as const,
+      icon: <CheckCircle2 size={14} />,
+      label: status,
+    };
+  }
+
+  if (
+    status === TicketStatus.CANCELLED ||
+    status === "Cancelado"
+  ) {
+    return {
+      color: "error" as const,
+      icon: <XCircle size={14} />,
+      label: status,
+    };
+  }
+
+  if (status === TicketStatus.WAITING) {
+    return {
+      color: "warning" as const,
+      icon: <Clock size={14} />,
+      label: status,
+    };
+  }
+
+  return {
+    color: "primary" as const,
+    icon: <ClipboardList size={14} />,
+    label: status,
+  };
+};
+
+const infoCardClass =
+  "p-6 border border-gray-200 shadow-sm rounded-2xl bg-white";
+const sectionTitleClass =
+  "font-bold mb-4 flex items-center gap-2 text-[#1e242b]";
+
 export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
   const { id } = useParams();
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const navigate = useNavigate();
   const token = localStorage.getItem("token") || undefined;
-  const { emailAsignado, emailSeguimiento, emailFinalizado, emailCancelado } =
-    EmailHelper();
 
-  const getTicket = () => {
-    apiRequest<Ticket>(`/tickets/${id}`, "GET", { authToken: token }).then(
-      (res) => {
-        setTicket(res);
-      }
-    );
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [screenError, setScreenError] = useState("");
+  const [savingAction, setSavingAction] = useState(false);
+  const [savingDate, setSavingDate] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const { emailSeguimiento, emailFinalizado, emailCancelado } = EmailHelper();
+
+  const [currentStatus, setCurrentStatus] = useState<TicketStatus>(
+    TicketStatus.WAITING,
+  );
+  const [pendingStatus, setPendingStatus] = useState<TicketStatus>(
+    TicketStatus.WAITING,
+  );
+  const [newDueDate, setNewDueDate] = useState<string>("");
+  const [actionLog, setActionLog] = useState("");
+  const [isEditingDate, setIsEditingDate] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState("");
+
+  const getTicket = async () => {
+    try {
+      setLoading(true);
+      setScreenError("");
+      const res = await apiRequest<Ticket>(`/tickets/${id}`, "GET", {
+        authToken: token,
+      });
+      setTicket(res);
+    } catch (error) {
+      console.error("Error cargando ticket:", error);
+      setScreenError("No fue posible cargar el detalle del ticket.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Helper function to get file icon based on MIME type
   const getFileIcon = (mimeType: string) => {
     if (mimeType.startsWith("image/")) {
       return <Image className="h-5 w-5 text-green-500" />;
-    } else if (mimeType.startsWith("video/")) {
+    }
+    if (mimeType.startsWith("video/")) {
       return <Video className="h-5 w-5 text-purple-500" />;
-    } else if (mimeType.startsWith("audio/")) {
+    }
+    if (mimeType.startsWith("audio/")) {
       return <Music className="h-5 w-5 text-blue-500" />;
-    } else if (mimeType.includes("pdf")) {
+    }
+    if (mimeType.includes("pdf")) {
       return <FileText className="h-5 w-5 text-red-500" />;
-    } else if (mimeType.includes("document") || mimeType.includes("word")) {
+    }
+    if (mimeType.includes("document") || mimeType.includes("word")) {
       return <FileText className="h-5 w-5 text-blue-600" />;
-    } else if (
+    }
+    if (
       mimeType.includes("sheet") ||
       mimeType.includes("excel") ||
       mimeType.includes("xlsx") ||
       mimeType.includes("xls")
     ) {
       return <FileText className="h-5 w-5 text-green-600" />;
-    } else if (
+    }
+    if (
       mimeType.includes("zip") ||
       mimeType.includes("rar") ||
       mimeType.includes("tar")
     ) {
       return <Archive className="h-5 w-5 text-yellow-600" />;
-    } else if (
+    }
+    if (
       mimeType.includes("powerpoint") ||
       mimeType.includes("presentation")
     ) {
       return <FileText className="h-5 w-5 text-orange-500" />;
-    } else if (mimeType.includes("text")) {
-      return <FileText className="h-5 w-5 text-gray-600" />;
-    } else {
-      return <File className="h-5 w-5 text-gray-400" />;
     }
+    if (mimeType.includes("text")) {
+      return <FileText className="h-5 w-5 text-gray-600" />;
+    }
+    return <File className="h-5 w-5 text-gray-400" />;
   };
 
-  // Format file size
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
-  // Handle file download
   const handleDownloadFile = async (attachment: Attachment) => {
     try {
-      // API_BASE_URL already includes /api/v1/, so just add the endpoint
+      setDownloadingId(attachment.id);
+
       const API_BASE_URL =
         import.meta.env.VITE_API_URL || "http://172.16.1.68:3001/api/v1";
+
       const response = await fetch(
         `${API_BASE_URL}/tickets/attachments/${attachment.id}/download`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -178,66 +260,43 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
 
-
-      // Para imágenes: abrir en nueva pestaña
       if (attachment.mimeType.startsWith("image/")) {
         window.open(url, "_blank");
       } else {
-        // Para otros archivos: descargar
         const a = document.createElement("a");
         a.href = url;
         a.download = attachment.originalName;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       }
+
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error descargando archivo:", error);
       alert("Error al descargar el archivo. Inténtelo de nuevo.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
   useEffect(() => {
     getTicket();
-  }, [token]);
+  }, [id, token]);
 
-  const navigate = useNavigate();
-
-  // State Management
-  // currentStatus: Represents the committed status of the ticket (affects UI visibility)
-  const [currentStatus, setCurrentStatus] = useState<TicketStatus>(
-    ticket?.status || TicketStatus.WAITING
-  );
-
-  // pendingStatus: Represents the value selected in the dropdown, waiting to be saved
-  const [pendingStatus, setPendingStatus] = useState<TicketStatus>(
-    ticket?.status || TicketStatus.WAITING
-  );
-
-  const [newDueDate, setNewDueDate] = useState<string>(
-    ticket?.dueDate ? ticket.dueDate.slice(0, 16) : ""
-  );
-  const [actionLog, setActionLog] = useState("");
-  const [isEditingDate, setIsEditingDate] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState("");
-
-  // Reset state if ticket ID changes (navigation between tickets)
-  useEffect(() => {
-    if (ticket) {
-      setCurrentStatus(ticket.status);
-      setPendingStatus(ticket.status);
-      setActionLog("");
-    }
-  }, [ticket?.id, ticket]);
-
-  // Update elapsed time counter every second (only for open tickets).
-  // For closed tickets, show elapsed time until completionDate (or updatedAt fallback) and do not keep counting.
   useEffect(() => {
     if (!ticket) return;
 
-    const isClosedStatus = (status: any) => {
-      // Keep existing enum checks, and also handle backend strings like "Finalizado"/"Cancelado"
+    setCurrentStatus(ticket.status);
+    setPendingStatus(ticket.status);
+    setActionLog("");
+    setNewDueDate(ticket.dueDate ? ticket.dueDate.slice(0, 16) : "");
+  }, [ticket]);
+
+  useEffect(() => {
+    if (!ticket) return;
+
+    const isClosedStatus = (status: TicketStatus | string) => {
       return (
         status === TicketStatus.RESOLVED ||
         status === TicketStatus.CANCELLED ||
@@ -274,7 +333,6 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
 
     const created = new Date(ticket.entryDate);
 
-    // If ticket is closed, use completionDate (or updatedAt as fallback) and do not keep counting
     if (isClosedStatus(ticket.status)) {
       const endIso = ticket.completionDate || ticket.updatedAt;
       const end = endIso ? new Date(endIso) : new Date();
@@ -282,10 +340,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       return;
     }
 
-    // If ticket is open, count in real time
     const updateElapsedTime = () => {
-      const now = new Date();
-      computeElapsedTime(created, now);
+      computeElapsedTime(created, new Date());
     };
 
     updateElapsedTime();
@@ -294,68 +350,123 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     return () => clearInterval(interval);
   }, [ticket]);
 
-  if (!ticket || !currentUser) return <div>Cargando...</div>;
+  const isClosedUIStatus = (status: TicketStatus | string) => {
+    return (
+      status === TicketStatus.RESOLVED ||
+      status === TicketStatus.CANCELLED ||
+      status === "Finalizado" ||
+      status === "Cancelado"
+    );
+  };
+
+  const closedAtIso = useMemo(() => {
+    return (
+      ticket?.completionDate ||
+      ticket?.updatedAt ||
+      ticket?.actions?.[0]?.date ||
+      null
+    );
+  }, [ticket]);
+
+  const statusChip = getStatusChipProps(currentStatus);
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto py-10">
+        <Paper className="p-8 border border-gray-200 rounded-2xl">
+          <Typography className="text-gray-600">Cargando ticket...</Typography>
+        </Paper>
+      </div>
+    );
+  }
+
+  if (screenError || !ticket || !currentUser) {
+    return (
+      <div className="max-w-6xl mx-auto py-10">
+        <Paper className="p-8 border border-gray-200 rounded-2xl space-y-4">
+          <Typography variant="h6" className="font-bold text-[#1e242b]">
+            Detalle de ticket
+          </Typography>
+          <Alert severity="error">
+            {screenError || "No fue posible mostrar la información del ticket."}
+          </Alert>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowLeft size={16} />}
+            onClick={() => navigate("/tickets")}
+          >
+            Volver
+          </Button>
+        </Paper>
+      </div>
+    );
+  }
 
   const isAssignee = currentUser.id === ticket.assigneeId;
   const isRequester = currentUser.id === ticket.requesterId;
-
-  // Roles check
   const isAdmin = currentUser.role === "admin";
-  const isAgent = currentUser.role === "agent"; // Jefes
-  // Specialist unused variable removed or kept if needed for logic extension
-  // const isSpecialist = currentUser.role === 'specialist';
+  const isAgent = currentUser.role === "agent";
 
-  // Capabilities
-  // Date Editing: Only Admin or Agent (Jefes)
   const canEditDate = isAdmin || isAgent;
-
-  // Tracking: Admin, Agent, or the Assigned Specialist
   const canAddTracking = isAdmin || isAgent || isAssignee;
-
-  // Cancel: Only Requester
   const canCancel =
     isRequester &&
     currentStatus !== TicketStatus.CANCELLED &&
     currentStatus !== TicketStatus.RESOLVED;
 
-  // Handler for saving the tracking action
-  const handleSaveAction = () => {
-    if (!actionLog) return;
+  const handleSaveAction = async () => {
+    if (!actionLog.trim()) return;
 
-    apiRequest(`/tickets/${id}/status`, "PUT", {
-      authToken: token,
-      body: { userId: currentUser.id, status: pendingStatus, actionLog },
-    }).then((res) => {
-      getTicket();
+    try {
+      setSavingAction(true);
 
-      // Send email notification for tracking
-      notifyTracking(pendingStatus, actionLog);
+      await apiRequest(`/tickets/${id}/status`, "PUT", {
+        authToken: token,
+        body: {
+          userId: currentUser.id,
+          status: pendingStatus,
+          actionLog,
+        },
+      });
 
-      // Send email notification for finalization if status is RESOLVED
+      await getTicket();
+      await notifyTracking(pendingStatus, actionLog);
+
       if (pendingStatus === TicketStatus.RESOLVED) {
-        notifyFinalized();
+        await notifyFinalized(actionLog);
       }
-    });
 
-    // Commit the pending status to current status
-    setCurrentStatus(pendingStatus);
-
-    // Reset log but keep status
+      setCurrentStatus(pendingStatus);
+      setActionLog("");
+    } catch (error) {
+      console.error("Error guardando acción:", error);
+      alert("No fue posible guardar la acción.");
+    } finally {
+      setSavingAction(false);
+    }
   };
 
-  const handleDateChange = () => {
-    const isoDate = new Date(newDueDate).toISOString();
-    apiRequest(`/tickets/${id}/duedate`, "PATCH", {
-      authToken: token,
-      body: { newDate: isoDate },
-    }).then(() => {
-      getTicket();
-    });
-    setIsEditingDate(false);
+  const handleDateChange = async () => {
+    try {
+      setSavingDate(true);
+      const isoDate = new Date(newDueDate).toISOString();
+
+      await apiRequest(`/tickets/${id}/duedate`, "PATCH", {
+        authToken: token,
+        body: { newDate: isoDate },
+      });
+
+      await getTicket();
+      setIsEditingDate(false);
+    } catch (error) {
+      console.error("Error actualizando fecha:", error);
+      alert("No fue posible actualizar la fecha de entrega.");
+    } finally {
+      setSavingDate(false);
+    }
   };
 
-  // Email notification functions
-  const notifyTracking = async (status: TicketStatus, actionLog: string) => {
+  const notifyTracking = async (status: TicketStatus, log: string) => {
     try {
       await apiRequest("/email/send", "POST", {
         authToken: token,
@@ -369,7 +480,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             fechaSeguimiento: new Date().toISOString(),
             estado: status,
             subject: ticket?.subject || "N/A",
-            accionRealizada: actionLog,
+            accionRealizada: log,
           }),
         },
       });
@@ -378,7 +489,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     }
   };
 
-  const notifyFinalized = async () => {
+  const notifyFinalized = async (resolutionText: string) => {
     try {
       await apiRequest("/email/send", "POST", {
         authToken: token,
@@ -390,9 +501,9 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
             asignBy: ticket?.requester?.name || "N/A",
             finalizadoPor: currentUser.name,
             fechaCierre: new Date().toISOString(),
-            diasAtraso: "0", // Calculate if needed
+            diasAtraso: "0",
             subject: ticket?.subject || "N/A",
-            resolucion: actionLog || "Ticket finalizado",
+            resolucion: resolutionText || "Ticket finalizado",
           }),
         },
       });
@@ -423,414 +534,579 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
     }
   };
 
-  // Handler for the global Cancel button (Requester action)
-  const handleCancelTicket = () => {
-    if (window.confirm("¿Está seguro de cancelar este ticket?")) {
-      apiRequest(`/tickets/${id}/cancel`, "PATCH", {
+  const handleCancelTicket = async () => {
+    if (!window.confirm("¿Está seguro de cancelar este ticket?")) return;
+
+    try {
+      await apiRequest(`/tickets/${id}/cancel`, "PATCH", {
         authToken: token,
         body: { reason: "Ticket cancelado por el solicitante" },
-      }).then(() => {
-        getTicket();
-
-        // Send email notification for cancellation
-        notifyCancelled();
       });
+
+      await getTicket();
+      await notifyCancelled();
+
       setCurrentStatus(TicketStatus.CANCELLED);
       setPendingStatus(TicketStatus.CANCELLED);
+    } catch (error) {
+      console.error("Error cancelando ticket:", error);
+      alert("No fue posible cancelar el ticket.");
     }
   };
 
-  // ✅ Helper local: detect closed status for UI blocks
-  const isClosedUIStatus = (status: any) => {
-    return (
-      status === TicketStatus.RESOLVED ||
-      status === TicketStatus.CANCELLED ||
-      status === "Finalizado" ||
-      status === "Cancelado"
-    );
-  };
-
-  // ✅ Closed date to display (prefer completionDate)
-  const closedAtIso =
-    ticket?.completionDate || ticket?.updatedAt || (ticket?.actions?.[0]?.date ?? null);
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
-        <Button
-          startIcon={<ArrowLeft />}
-          onClick={() => navigate("/tickets")}
-          className="text-gray-500 hover:text-gray-900"
-        >
-          Volver
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-start sm:items-center gap-3">
-            <Typography
-              variant="h4"
-              className="font-bold text-[#1e242b] bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent"
+    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-12">
+      <Paper className="p-6 border border-gray-200 rounded-2xl bg-white shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3 min-w-0">
+            <Button
+              startIcon={<ArrowLeft size={16} />}
+              onClick={() => navigate("/tickets")}
+              className="w-fit text-gray-600"
             >
-              {ticket.id}: {ticket.subject}
-            </Typography>
-            <Chip
-              label={currentStatus}
-              color={
-                currentStatus === TicketStatus.RESOLVED
-                  ? "success"
-                  : currentStatus === TicketStatus.CANCELLED
-                  ? "error"
-                  : "primary"
-              }
-              variant="outlined"
-              className="shadow-sm"
-            />
-          </div>
-        </div>
-        {/* Cancel Button: Only Requester can cancel */}
-        {canCancel && (
-          <Button variant="outlined" color="error" onClick={handleCancelTicket}>
-            Cancelar Ticket
-          </Button>
-        )}
-      </div>
+              Volver
+            </Button>
 
-      <Grid container spacing={4}>
-        <Grid item={true} xs={12} lg={8}>
-          <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl mb-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
-            <Typography
-              variant="h6"
-              className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
-            >
-              <Tag size={20} className="text-[#e51b24] drop-shadow-sm" />
-              <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
-                Descripción de la Solicitud
-              </span>
-            </Typography>
-            <Typography
-              variant="body1"
-              className="text-gray-700 whitespace-pre-wrap leading-relaxed"
-            >
-              {ticket.description || "Sin descripción detallada."}
-            </Typography>
-          </Paper>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Typography
+                  variant="h4"
+                  className="font-bold text-[#1e242b] break-words"
+                >
+                  {ticket.id}
+                </Typography>
 
-          {/* Attachments Section */}
-          {ticket.attachments && ticket.attachments.length > 0 && (
-            <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl mb-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
-              <Typography
-                variant="h6"
-                className="font-bold mb-4 flex items-center gap-2 text-[#1e242b]"
-              >
-                <File size={20} className="text-[#e51b24] drop-shadow-sm" />
-                <span className="bg-gradient-to-r from-[#1e242b] to-[#2a3f5f] bg-clip-text text-transparent">
-                  Archivos Adjuntos
-                </span>
                 <Chip
-                  label={ticket.attachments.length}
+                  icon={statusChip.icon}
+                  label={statusChip.label}
+                  color={statusChip.color}
+                  variant="filled"
+                />
+              </div>
+
+              <Typography
+                variant="h5"
+                className="font-semibold text-gray-900 break-words"
+              >
+                {ticket.subject}
+              </Typography>
+
+              <div className="flex flex-wrap gap-2">
+                <Chip
                   size="small"
                   variant="outlined"
-                  className="ml-2 text-xs"
+                  icon={<Tag size={14} />}
+                  label={`Prioridad: ${ticket.priority}`}
                 />
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  icon={<Calendar size={14} />}
+                  label={`Ingreso: ${formatDate(ticket.entryDate)}`}
+                />
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  icon={<Clock size={14} />}
+                  label={`Tiempo: ${elapsedTime}`}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {canCancel && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleCancelTicket}
+              >
+                Cancelar Ticket
+              </Button>
+            )}
+          </div>
+        </div>
+      </Paper>
+
+      <Grid container spacing={4}>
+        <Grid item={true} xs={12} xl={8}>
+          <div className="space-y-6">
+            <Paper className={infoCardClass}>
+              <Typography variant="h6" className={sectionTitleClass}>
+                <ClipboardList size={20} className="text-[#e51b24]" />
+                Descripción de la solicitud
               </Typography>
-              <div className="space-y-3">
-                {ticket.attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors duration-150"
-                  >
-                    <div className="flex items-center space-x-3">
-                      {getFileIcon(attachment.mimeType)}
-                      <div>
-                        <p className="font-medium text-sm text-gray-900">
-                          {attachment.originalName}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatFileSize(attachment.size)} •{" "}
-                          {formatDate(attachment.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<Download size={16} />}
-                      onClick={() => handleDownloadFile(attachment)}
-                      className="text-[#e51b24] border-[#e51b24] hover:bg-[#e51b24] hover:text-white transition-colors duration-200"
-                    >
-                      Descargar
-                    </Button>
-                  </div>
-                ))}
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <Typography
+                  variant="body1"
+                  className="text-gray-700 whitespace-pre-wrap leading-7"
+                >
+                  {ticket.description || "Sin descripción detallada."}
+                </Typography>
               </div>
             </Paper>
-          )}
 
-          {/* Actions / Tracking Log */}
-          <div className="space-y-6">
-            <div className="flex justify-between items-center px-2">
-              <Typography variant="h6" className="font-bold text-[#1e242b]">
-                Seguimiento y Acciones
-              </Typography>
-            </div>
-
-            {canAddTracking &&
-              currentStatus !== TicketStatus.RESOLVED &&
-              currentStatus !== TicketStatus.CANCELLED && (
-                <Paper className="p-4 border border-gray-200 bg-gradient-to-br from-gray-50 to-blue-50 shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <Typography
-                    variant="subtitle2"
-                    className="mb-2 font-bold text-gray-700 flex items-center gap-2"
-                  >
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    Registrar Acción Realizada
+            {ticket.attachments && ticket.attachments.length > 0 && (
+              <Paper className={infoCardClass}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <Typography variant="h6" className={sectionTitleClass}>
+                    <Paperclip size={20} className="text-[#e51b24]" />
+                    Archivos adjuntos
                   </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={4}
-                    placeholder="Describa la acción realizada..."
-                    value={actionLog}
-                    onChange={(e) => setActionLog(e.target.value)}
-                    className="bg-white mb-3"
+
+                  <Chip
+                    size="small"
+                    label={`${ticket.attachments.length} archivo${
+                      ticket.attachments.length === 1 ? "" : "s"
+                    }`}
+                    variant="outlined"
                   />
+                </div>
 
-                  <div className="flex justify-between items-center mt-8">
-                    <FormControl size="small" sx={{ minWidth: 200 }}>
-                      <InputLabel>Actualizar Estado</InputLabel>
-                      <Select
-                        value={pendingStatus}
-                        label="Actualizar Estado"
-                        onChange={(e) =>
-                          setPendingStatus(e.target.value as TicketStatus)
-                        }
-                      >
-                        {Object.values(TicketStatus).map((s) => (
-                          <MenuItem key={s} value={s}>
-                            {s}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <Button
-                      variant="contained"
-                      startIcon={<Save size={16} />}
-                      onClick={handleSaveAction}
-                      disabled={!actionLog}
-                      sx={{ backgroundColor: "#e51b24" }}
-                      className="shadow-md hover:shadow-lg transition-shadow duration-200"
+                <div className="space-y-3">
+                  {ticket.attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:flex-row md:items-center md:justify-between"
                     >
-                      Registrar y Guardar
-                    </Button>
-                  </div>
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="mt-0.5">{getFileIcon(attachment.mimeType)}</div>
 
-                  {(pendingStatus === TicketStatus.RESOLVED ||
-                    pendingStatus === TicketStatus.CANCELLED) && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-gradient-to-r from-orange-50 to-yellow-50 p-3 rounded-lg border border-orange-200 shadow-sm">
-                      <AlertCircle size={14} className="flex-shrink-0" />
-                      <span className="font-medium">
-                        Atención: Al guardar, el ticket se cerrará y no podrá
-                        agregar más acciones.
-                      </span>
-                    </div>
-                  )}
-                </Paper>
-              )}
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-gray-900 break-all">
+                            {attachment.originalName}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatFileSize(attachment.size)} •{" "}
+                            {formatDate(attachment.createdAt)}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1 break-all">
+                            {attachment.mimeType}
+                          </p>
+                        </div>
+                      </div>
 
-            {/* History List */}
-            <div className="space-y-4">
-              <div className="flex gap-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg shadow-sm">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-xs font-bold text-white shadow-sm">
-                  Sys
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-medium">
-                    {formatDate(ticket.entryDate)}
-                  </p>
-                  <p className="text-sm font-medium text-gray-700">
-                    Ticket ingresado al sistema.
-                  </p>
-                </div>
-              </div>
-              {ticket.actions.map((action) => (
-                <div
-                  key={action.id}
-                  className="flex gap-4 p-4 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
-                >
-                  <div className="flex-1">
-                    <div className="flex justify-between items-baseline">
-                      <Avatar
-                        sx={{ width: 32, height: 32, className: "shadow-sm" }}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<Download size={16} />}
+                        onClick={() => handleDownloadFile(attachment)}
+                        disabled={downloadingId === attachment.id}
+                        sx={{
+                          borderColor: "#e51b24",
+                          color: "#e51b24",
+                          "&:hover": {
+                            borderColor: "#c4161e",
+                            backgroundColor: "#fff5f5",
+                          },
+                        }}
                       >
-                        {action.userNameSnapshot?.charAt(0) || "U"}
-                      </Avatar>
+                        {downloadingId === attachment.id
+                          ? "Descargando..."
+                          : "Descargar"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Paper>
+            )}
 
+            <Paper className={infoCardClass}>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <Typography variant="h6" className={sectionTitleClass}>
+                  <MessageSquare size={20} className="text-[#e51b24]" />
+                  Seguimiento y acciones
+                </Typography>
+
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`${ticket.actions?.length || 0} registros`}
+                />
+              </div>
+
+              {canAddTracking &&
+                currentStatus !== TicketStatus.RESOLVED &&
+                currentStatus !== TicketStatus.CANCELLED && (
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 mb-6 space-y-4">
+                    <div>
                       <Typography
                         variant="subtitle2"
-                        className="font-bold text-gray-800"
+                        className="font-bold text-blue-900"
                       >
-                        {action.userNameSnapshot}
+                        Registrar nueva acción
                       </Typography>
-                      <Typography
-                        variant="caption"
-                        className="text-gray-500 font-medium"
-                      >
-                        {formatDate(action.date)}
+                      <Typography variant="body2" className="text-blue-700 mt-1">
+                        Documenta el seguimiento y, si aplica, actualiza el
+                        estado del ticket.
                       </Typography>
                     </div>
-                    <Typography
-                      variant="body2"
-                      className="text-gray-700 mt-1 leading-relaxed"
-                    >
-                      {action.action}
-                    </Typography>
+
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={5}
+                      placeholder="Describa la acción realizada..."
+                      value={actionLog}
+                      onChange={(e) => setActionLog(e.target.value)}
+                      className="bg-white"
+                    />
+
+                    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                      <FormControl size="small" sx={{ minWidth: 220 }}>
+                        <InputLabel>Actualizar Estado</InputLabel>
+                        <Select
+                          value={pendingStatus}
+                          label="Actualizar Estado"
+                          onChange={(e) =>
+                            setPendingStatus(e.target.value as TicketStatus)
+                          }
+                        >
+                          {Object.values(TicketStatus).map((s) => (
+                            <MenuItem key={s} value={s}>
+                              {s}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+
+                      <Button
+                        variant="contained"
+                        startIcon={<Save size={16} />}
+                        onClick={handleSaveAction}
+                        disabled={!actionLog.trim() || savingAction}
+                        sx={{
+                          backgroundColor: "#e51b24",
+                          "&:hover": { backgroundColor: "#c4161e" },
+                        }}
+                      >
+                        {savingAction ? "Guardando..." : "Registrar y guardar"}
+                      </Button>
+                    </div>
+
+                    {(pendingStatus === TicketStatus.RESOLVED ||
+                      pendingStatus === TicketStatus.CANCELLED) && (
+                      <Alert severity="warning" icon={<AlertCircle size={16} />}>
+                        Al guardar este cambio, el ticket quedará cerrado y ya no
+                        se podrán registrar más acciones.
+                      </Alert>
+                    )}
+                  </div>
+                )}
+
+              <div className="space-y-4">
+                <div className="relative pl-6">
+                  <div className="absolute left-[11px] top-0 bottom-0 w-px bg-gray-200" />
+                  <div className="relative flex gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="absolute -left-[2px] top-5 h-3 w-3 rounded-full bg-gray-400 border-2 border-white" />
+                    <div className="w-10 flex justify-center">
+                      <Avatar
+                        sx={{
+                          width: 36,
+                          height: 36,
+                          bgcolor: "#6b7280",
+                          fontSize: 13,
+                        }}
+                      >
+                        Sys
+                      </Avatar>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <Typography
+                          variant="subtitle2"
+                          className="font-bold text-gray-800"
+                        >
+                          Sistema
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          className="text-gray-500 font-medium"
+                        >
+                          {formatDate(ticket.entryDate)}
+                        </Typography>
+                      </div>
+                      <Typography
+                        variant="body2"
+                        className="text-gray-700 mt-1 leading-6"
+                      >
+                        Ticket ingresado al sistema.
+                      </Typography>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {ticket.actions.map((action) => (
+                  <div key={action.id} className="relative pl-6">
+                    <div className="absolute left-[11px] top-0 bottom-0 w-px bg-gray-200" />
+                    <div className="relative flex gap-4 rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 transition-colors">
+                      <div className="absolute -left-[2px] top-5 h-3 w-3 rounded-full bg-[#e51b24] border-2 border-white" />
+                      <div className="w-10 flex justify-center">
+                        <Avatar
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            bgcolor: "#e51b24",
+                            fontSize: 14,
+                          }}
+                        >
+                          {action.userNameSnapshot?.charAt(0) || "U"}
+                        </Avatar>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <Typography
+                            variant="subtitle2"
+                            className="font-bold text-gray-800"
+                          >
+                            {action.userNameSnapshot || "Usuario"}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            className="text-gray-500 font-medium"
+                          >
+                            {formatDate(action.date)}
+                          </Typography>
+                        </div>
+
+                        <Typography
+                          variant="body2"
+                          className="text-gray-700 mt-2 leading-6 whitespace-pre-wrap"
+                        >
+                          {action.action}
+                        </Typography>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {ticket.actions.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center">
+                    <Typography className="text-gray-500">
+                      Aún no hay acciones registradas para este ticket.
+                    </Typography>
+                  </div>
+                )}
+              </div>
+            </Paper>
           </div>
         </Grid>
 
-        <Grid item={true} xs={12} lg={4}>
-          <Paper className="p-6 border border-gray-200 shadow-lg rounded-xl space-y-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-shadow duration-300">
-            <div>
+        <Grid item={true} xs={12} xl={4}>
+          <div className="space-y-6">
+            <Paper className={`${infoCardClass} sticky top-6`}>
               <Typography
                 variant="subtitle2"
-                className="uppercase text-xs font-bold text-gray-500 mb-2"
+                className="uppercase text-xs font-bold text-gray-500 mb-4 tracking-wide"
               >
-                Detalles Operativos
+                Resumen operativo
               </Typography>
+
               <div className="space-y-4">
-                <div className="flex items-start sm:items-center gap-3">
-                  <Clock size={18} className="text-gray-400" />
-                  <div className="w-full">
-                    <p className="text-xs text-gray-500">Prioridad</p>
-                    <p className="font-medium text-sm">{ticket.priority}</p>
-                  </div>
-                </div>
-                <div className="flex items-start sm:items-center gap-3">
-                  <Tag size={18} className="text-gray-400" />
-                  <div>
-                    <p className="text-xs text-gray-500">Área</p>
-                    <p className="font-medium text-sm">
-                      {ticket.assignee?.area?.name}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start sm:items-center gap-3">
-                  <Calendar size={18} className="text-gray-400" />
-                  <div className="w-full">
-                    <p className="text-xs text-gray-500">Fecha Ingreso</p>
-                    <p className="font-medium text-sm">
-                      {formatDate(ticket.entryDate)}
-                    </p>
-
-                    <div className="mt-2 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                        <p className="text-xs font-bold text-blue-700">
-                          Tiempo transcurrido:
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold text-blue-900 mt-1">
-                        {elapsedTime}
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Clock size={18} className="text-gray-500 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500">Prioridad</p>
+                      <p className="font-medium text-sm text-gray-900 mt-1">
+                        {ticket.priority}
                       </p>
                     </div>
+                  </div>
+                </div>
 
-                    {/* ✅ NUEVO: Solo si está cerrado/finalizado/cancelado, mostrar fecha/hora de cierre */}
-                    {isClosedUIStatus(ticket.status) && closedAtIso && (
-                      <div className="mt-2 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">                        
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Tag size={18} className="text-gray-500 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500">Área</p>
+                      <p className="font-medium text-sm text-gray-900 mt-1">
+                        {ticket.assignee?.area?.name || ticket.area?.name || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Calendar size={18} className="text-gray-500 mt-0.5" />
+                    <div className="w-full min-w-0">
+                      <p className="text-xs text-gray-500">Fecha de ingreso</p>
+                      <p className="font-medium text-sm text-gray-900 mt-1">
+                        {formatDate(ticket.entryDate)}
+                      </p>
+
+                      <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-xs font-bold text-blue-700">
+                          Tiempo transcurrido
+                        </p>
+                        <p className="text-sm font-bold text-blue-900 mt-1">
+                          {elapsedTime}
+                        </p>
+                      </div>
+
+                      {isClosedUIStatus(ticket.status) && closedAtIso && (
+                        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
                           <p className="text-xs font-bold text-green-700">
-                            Fecha de cierre:
+                            Fecha de cierre
+                          </p>
+                          <p className="text-sm font-bold text-green-900 mt-1">
+                            {formatDate(closedAtIso)}
                           </p>
                         </div>
-                        <p className="text-sm font-bold text-green-900 mt-1">
-                          {formatDate(closedAtIso)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <AlertCircle size={18} className="text-[#e51b24] mt-1" />
-                  <div className="w-full">
-                    <div className="flex justify-between items-center">
-                      <p className="text-xs text-gray-500">
-                        Fecha Entrega (Deadline)
-                      </p>
-                      {canEditDate && (
-                        <button
-                          onClick={() => setIsEditingDate(!isEditingDate)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <Edit size={14} />
-                        </button>
                       )}
                     </div>
-                    {isEditingDate ? (
-                      <div className="flex flex-col sm:flex-row gap-1 mt-1">
-                        <input
-                          type="datetime-local"
-                          value={newDueDate}
-                          onChange={(e) => setNewDueDate(e.target.value)}
-                          className="border rounded px-1 text-sm w-full"
-                        />
-                        <button
-                          onClick={handleDateChange}
-                          className="bg-green-500 text-white px-2 rounded text-xs"
-                        >
-                          OK
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="font-medium text-sm text-[#e51b24]">
-                        {formatDate(ticket.dueDate)}
-                      </p>
-                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-            <Divider />
 
-            <div>
-              <Typography
-                variant="subtitle2"
-                className="uppercase text-xs font-bold text-gray-500 mb-3"
-              >
-                Involucrados
-              </Typography>
-              <div className="space-y-4">
-                <div className="flex items-start sm:items-center gap-3">
-                  <Avatar sx={{ width: 32, height: 32 }}>
-                    {ticket.requester?.name?.charAt(0) || "U"}
-                  </Avatar>
-                  <div>
-                    <p className="text-xs text-gray-500">Solicitante</p>
-                    <p className="font-medium text-sm">
-                      {ticket.requester.name}
-                    </p>
-                    <p className="text-xs text-gray-400">{ticket.country}</p>
-                  </div>
-                </div>
-                <div className="flex items-start sm:items-center gap-3">
-                  <Avatar sx={{ width: 32, height: 32, bgcolor: "#e51b24" }}>
-                    {ticket.assignee?.name?.charAt(0) || "U"}
-                  </Avatar>
-                  <div>
-                    <p className="text-xs text-gray-500">Responsable</p>
-                    <p className="font-medium text-sm">
-                      {ticket.assignee.name}
-                    </p>
-                    <p className="text-xs text-gray-400">{ticket.area as any}</p>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={18} className="text-[#e51b24] mt-0.5" />
+                    <div className="w-full min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-gray-500">
+                          Fecha de entrega
+                        </p>
+
+                        {canEditDate && (
+                          <button
+                            onClick={() => setIsEditingDate(!isEditingDate)}
+                            className="text-blue-600 hover:text-blue-800"
+                            type="button"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditingDate ? (
+                        <div className="mt-2 space-y-2">
+                          <input
+                            type="datetime-local"
+                            value={newDueDate}
+                            onChange={(e) => setNewDueDate(e.target.value)}
+                            className="border rounded-lg px-3 py-2 text-sm w-full bg-white"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleDateChange}
+                              disabled={savingDate}
+                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs"
+                              type="button"
+                            >
+                              {savingDate ? "Guardando..." : "Guardar"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsEditingDate(false);
+                                setNewDueDate(
+                                  ticket.dueDate ? ticket.dueDate.slice(0, 16) : "",
+                                );
+                              }}
+                              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-lg text-xs"
+                              type="button"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="font-medium text-sm text-[#e51b24] mt-1">
+                          {formatDate(ticket.dueDate)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </Paper>
+
+              <Divider className="my-6" />
+
+              <div>
+                <Typography
+                  variant="subtitle2"
+                  className="uppercase text-xs font-bold text-gray-500 mb-4 tracking-wide"
+                >
+                  Involucrados
+                </Typography>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Avatar sx={{ width: 40, height: 40 }}>
+                        {ticket.requester?.name?.charAt(0) || "U"}
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">Solicitante</p>
+                        <p className="font-medium text-sm text-gray-900 mt-1">
+                          {ticket.requester?.name}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1 break-all">
+                          {ticket.requester?.email}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {ticket.country}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <Avatar
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          bgcolor: "#e51b24",
+                        }}
+                      >
+                        {ticket.assignee?.name?.charAt(0) || "U"}
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">Responsable</p>
+                        <p className="font-medium text-sm text-gray-900 mt-1">
+                          {ticket.assignee?.name}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1 break-all">
+                          {ticket.assignee?.email}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {ticket.assignee?.area?.name || ticket.area?.name || "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <UserIcon size={18} className="text-gray-500 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">Permisos actuales</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {isAdmin && <Chip size="small" label="Admin" />}
+                          {isAgent && <Chip size="small" label="Jefe/Agent" />}
+                          {isAssignee && (
+                            <Chip size="small" label="Responsable asignado" />
+                          )}
+                          {isRequester && (
+                            <Chip size="small" label="Solicitante" />
+                          )}
+                          {!isAdmin &&
+                            !isAgent &&
+                            !isAssignee &&
+                            !isRequester && (
+                              <Chip size="small" label="Consulta" />
+                            )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Paper>
+          </div>
         </Grid>
       </Grid>
     </div>
