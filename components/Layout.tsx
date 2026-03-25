@@ -13,7 +13,6 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ user, onLogout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  console.log(user);
   return (
     <div className="min-h-screen bg-gray-50 flex overflow-hidden">
       {/* Desktop Sidebar */}

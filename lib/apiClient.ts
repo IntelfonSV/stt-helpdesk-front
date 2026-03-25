@@ -69,7 +69,6 @@ export async function apiRequest<T>(
     ...rest,
   });
 
-   console.log(response)
 
   if (!response.ok) {
     // Manejar errores de autenticación (token vencido)

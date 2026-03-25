@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { TextField, Button, Alert, CircularProgress } from "@mui/material";
+import { TextField, Button, Alert, CircularProgress, IconButton, InputAdornment } from "@mui/material";
 import { Logo } from "./Logo";
 import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { apiRequest } from "@/lib/apiClient";
+import { Eye, EyeOff } from "lucide-react";
 interface LoginScreenProps {
   onLogin: (email: string, token?: string) => void;
 }
@@ -21,6 +22,7 @@ interface LoginResponse {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -48,7 +50,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         area: data.area,
       };
 
-      console.log(user);
 
       // aquí podrías guardar token en localStorage / context, etc.
       localStorage.setItem('token', data.token);
@@ -70,6 +71,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const handleBackToLogin = () => {
     setShowForgotPassword(false);
     setError("");
+  };
+
+  const handleTogglePassword = () => {
+    setShowPassword(!showPassword);
   };
 
   if (showForgotPassword) {
@@ -108,12 +113,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             />
             <TextField
               label="Contraseña"
-              type="password"
+              type={showPassword ? "text" : "password"}
               fullWidth
               variant="outlined"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={handleTogglePassword}
+                      edge="end"
+                      disabled={loading}
+                      sx={{ color: "#666" }}
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
           </div>
 

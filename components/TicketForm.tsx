@@ -249,17 +249,6 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
         formData.append('files', uploadedFile.file);
       });
 
-      // Debug: Log FormData contents
-      console.log('Uploading files:', uploadedFiles.length);
-      console.log('FormData contents:');
-      for (let [key, value] of formData.entries()) {
-        if (value && typeof value === 'object' && 'name' in value && 'size' in value) {
-          console.log(key, 'File:', value.name, value.size, value.type);
-        } else {
-          console.log(key, value);
-        }
-      }
-
       const res = await apiRequest<CreateTicketResponse>("/tickets", "POST", {
         authToken: token,
         body: formData,
@@ -291,7 +280,7 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
         await apiRequest('/email/send', 'POST', {
           authToken: token,
           body: {
-            to: `${users?.find(u => u.id === assignee)?.email || ""}`,
+            to: [currentUser.email, `${users?.find(u => u.id === assignee)?.email || ""}`],
             subject: `Nuevo ticket asignado: ${subject}`,
             html: emailAsignado({
                         asignBy: currentUser.name,
@@ -326,10 +315,6 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
 
 
   useEffect(() => {
-    console.log("currentUser: ", currentUser);
-    console.log("users: ", users);
-    console.log("country: ", country);
-    console.log("area: ", area);
     const availableAssignees = users?.filter(
     (u: any) =>
       u.receivableFrom.includes(`${currentUser.id}`) && 
@@ -337,7 +322,6 @@ export const TicketForm: React.FC<TicketFormProps> = ({ currentUser }) => {
       (area ? u.area.id == area : false)
   );
 
-  console.log( "availableAssignees: ",availableAssignees);
   setAssignees(availableAssignees);
   }, [country, area, users]);
 

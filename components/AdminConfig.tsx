@@ -234,13 +234,8 @@ export const AdminConfig: React.FC = () => {
           apiRequest<string[]>("/countries", "GET", { authToken: token }),
         ]);
 
-        console.log("Categories API response:", categoriesRes);
-        console.log("Users:", usersRes);
-        console.log("Token being used:", token);
         setUsers(usersRes);
-        console.log("Categories:", categoriesRes)
         setCategories(categoriesRes);
-        console.log("Countries:", countriesRes)
         setCountries(countriesRes);
       } catch (e) {
         console.error("Error fetching data:", e);
@@ -355,12 +350,9 @@ export const AdminConfig: React.FC = () => {
     }
   };
 
-  const handleDeleteArea = async (area: any) => {
-    console.log("Deleting area:", area);
-    
+  const handleDeleteArea = async (area: any) => {    
     // Always use the area ID
     const areaId = area.id;
-    console.log("Using area ID:", areaId);
     
     if (!areaId) {
       Swal.fire({ icon: "error", title: "Error: El área no tiene ID" });
@@ -377,9 +369,7 @@ export const AdminConfig: React.FC = () => {
     }).then(async (result) => {
       if (!result.isConfirmed) return;
       try {
-        const endpoint = `/areas/${areaId}`;
-        console.log("Making DELETE request to:", endpoint);
-        
+        const endpoint = `/areas/${areaId}`;        
         await apiRequest(endpoint, 'DELETE', { 
           authToken: token,
         });
@@ -394,7 +384,6 @@ export const AdminConfig: React.FC = () => {
         
         Swal.fire({ icon: "success", title: "Área eliminada" });
       } catch (err: any) {
-        console.error("Error deleting area:", err);
         Swal.fire({ icon: "error", title: "Error al eliminar el área" });
       }
     });
@@ -433,11 +422,13 @@ export const AdminConfig: React.FC = () => {
             setUsers(usersData);
           })
           .catch((err) => {
-            console.error("Error fetching users:", err);
+            Swal.fire({
+                icon: "error", 
+                title: "Error al obtener usuarios"    
+            })
           });
       })
       .catch((err) => {
-        console.error("Error adding user:", err);
         Swal.fire({ icon: "error", title: "Error al agregar el usuario" });
       });
   };
@@ -446,9 +437,6 @@ export const AdminConfig: React.FC = () => {
     fetchEmailConfig();
   }, []);
 
-  useEffect(() => {
-    console.log("Users:", users);
-  }, [users]);
 
   // --- Countries Handlers ---
   const handleAddCountry = () => {
@@ -532,7 +520,6 @@ export const AdminConfig: React.FC = () => {
 
   // --- Edit User Helpers ---
   const handleOpenEditUser = (user: User) => {
-    console.log("Opening edit user:", user);
     setEditingUser(user);
     // Convert area to string ID for the select field
     const areaId = typeof user.area === 'string' ? user.area : user.area?.id?.toString() || "";
@@ -1216,7 +1203,6 @@ export const AdminConfig: React.FC = () => {
 
             {/* Categories List */}
             <List className="bg-gray-50 rounded-lg border border-gray-200 max-h-64 overflow-y-auto max-w-2xl mb-8">
-              {console.log("Rendering categories:", categories)}
               {categories.length === 0 ? (
                 <ListItem>
                   <ListItemText 
@@ -1348,7 +1334,6 @@ export const AdminConfig: React.FC = () => {
                 {category.areas?.length > 0 ? (
                   <List className="bg-gray-50 rounded-lg border border-gray-200 max-h-48 overflow-y-auto max-w-2xl">
                     {category.areas.map((area, index) => {
-                      console.log("Rendering area:", area, "with ID:", area.id);
                       return (
                       <React.Fragment key={area.id}>
                         <ListItem
@@ -1357,7 +1342,6 @@ export const AdminConfig: React.FC = () => {
                               edge="end"
                               aria-label="delete"
                               onClick={() => {
-                                console.log("Delete clicked for area:", area);
                                 handleDeleteArea(area);
                               }}
                               color="error"

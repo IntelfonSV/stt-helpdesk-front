@@ -141,13 +141,8 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
       }
 
       const blob = await response.blob();
-      console.log('Blob descargado:', {
-        size: blob.size,
-        type: blob.type
-      });
 
       const url = window.URL.createObjectURL(blob);
-      console.log('URL creada:', url);
       
       // Para imágenes: abrir en nueva pestaña
       if (attachment.mimeType.startsWith('image/')) {
@@ -163,7 +158,6 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ currentUser }) => {
         document.body.removeChild(a);
       }
     } catch (error) {
-      console.error('Error descargando archivo:', error);
       alert('Error al descargar el archivo. Inténtelo de nuevo.');
     }
   };
