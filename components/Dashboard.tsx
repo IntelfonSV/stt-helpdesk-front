@@ -59,6 +59,19 @@ interface Category {
   areas: { id: number; name: string }[];
 }
 
+type AreaWithCategory = {
+  id?: number | string;
+  name?: string;
+  categoria?: {
+    id?: number | string;
+    nombre?: string;
+  };
+  category?: {
+    id?: number | string;
+    nombre?: string;
+  };
+};
+
 const KPICard: React.FC<{
   title: string;
   value: string | number;
@@ -80,6 +93,40 @@ const KPICard: React.FC<{
     {subtext && <p className="text-xs text-gray-400 mt-2">{subtext}</p>}
   </Paper>
 );
+
+const getAssigneeObject = (ticket: Ticket): User | null => {
+  return typeof ticket.assignee === "object" && ticket.assignee !== null
+    ? ticket.assignee
+    : null;
+};
+
+const getTicketArea = (ticket: Ticket): AreaWithCategory | undefined => {
+  const assigneeObj = getAssigneeObject(ticket);
+
+  return assigneeObj?.area as AreaWithCategory | undefined;
+};
+
+const getTicketCategoryId = (ticket: Ticket): number | string | undefined => {
+  const areaObj = getTicketArea(ticket);
+
+  return areaObj?.categoria?.id ?? areaObj?.category?.id;
+};
+
+const getTicketCountryId = (ticket: Ticket): number | string | undefined => {
+  const assigneeObj = getAssigneeObject(ticket);
+
+  return assigneeObj?.country?.id;
+};
+
+const getCurrentUserCountryId = (
+  currentUser: User,
+): number | string | undefined => {
+  if (typeof currentUser.country === "object" && currentUser.country !== null) {
+    return currentUser.country.id;
+  }
+
+  return currentUser.country;
+};
 
 export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const navigate = useNavigate();
@@ -141,86 +188,114 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   }, [token]);
 
   const accessibleTickets = useMemo(() => {
-    return tickets.filter((t) => {
-      if (currentUser.role === "admin") return true;
-      return (
-        t.assignee.country.id ==
-        (typeof currentUser.country === "string"
-          ? currentUser.country
-          : currentUser.country.id)
-      );
-    });
-  }, [currentUser, tickets]);
+    return tickets
+      .map((t) => {
+        const user = users.find((u) => String(u.id) === String(t.assigneeId));
+
+        return {
+          ...t,
+          assignee: user || t.assignee,
+        };
+      })
+      .filter((t) => {
+        if (currentUser.role === "admin") return true;
+
+        const ticketCountryId = getTicketCountryId(t);
+        const currentUserCountryId = getCurrentUserCountryId(currentUser);
+
+        return String(ticketCountryId) === String(currentUserCountryId);
+      });
+  }, [currentUser, tickets, users]);
 
   const filteredAreas = useMemo(() => {
     if (categoryFilter === "All") {
       return ticketAreas;
     }
 
-    return ticketAreas.filter((area) => {
-      const category = categories.find(
-        (cat) => cat.id === Number(categoryFilter),
-      );
+    const category = categories.find(
+      (cat) => String(cat.id) === String(categoryFilter),
+    );
 
-      return (
-        category && category.areas.some((catArea) => catArea.id === area.id)
-      );
-    });
+    if (!category) {
+      return [];
+    }
+
+    return ticketAreas.filter((area) =>
+      category.areas.some((catArea) => String(catArea.id) === String(area.id)),
+    );
   }, [categoryFilter, ticketAreas, categories]);
 
   useEffect(() => {
     if (categoryFilter !== "All") {
       const isCurrentAreaValid =
-        filteredAreas.some((area) => area.name === areaFilter) ||
-        areaFilter === "All";
+        areaFilter === "All" ||
+        filteredAreas.some((area) => area.name === areaFilter);
+
       if (!isCurrentAreaValid) {
         setAreaFilter("All");
       }
     }
   }, [categoryFilter, filteredAreas, areaFilter]);
 
+  const applyCommonFilters = (ticket: Ticket) => {
+    const assigneeObj = getAssigneeObject(ticket);
+    const areaObj = getTicketArea(ticket);
+    const categoryId = getTicketCategoryId(ticket);
+    const countryId = assigneeObj?.country?.id;
+
+    if (
+      categoryFilter !== "All" &&
+      String(categoryId) !== String(categoryFilter)
+    ) {
+      return false;
+    }
+
+    if (areaFilter !== "All" && areaObj?.name !== areaFilter) {
+      return false;
+    }
+
+    if (
+      countryFilter !== "All" &&
+      String(countryId) !== String(countryFilter)
+    ) {
+      return false;
+    }
+
+    if (
+      responsibleFilter !== "All" &&
+      String(ticket.assigneeId) !== String(responsibleFilter)
+    ) {
+      return false;
+    }
+
+    if (priorityFilter !== "All" && ticket.priority !== priorityFilter) {
+      return false;
+    }
+
+    if (statusFilter !== "All" && ticket.status !== statusFilter) {
+      return false;
+    }
+
+    if (dateRange.start) {
+      if (new Date(ticket.entryDate) < new Date(dateRange.start)) {
+        return false;
+      }
+    }
+
+    if (dateRange.end) {
+      const endDate = new Date(dateRange.end);
+      endDate.setHours(23, 59, 59, 999);
+
+      if (new Date(ticket.entryDate) > endDate) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const filteredTickets = useMemo(() => {
-    return accessibleTickets.filter((t) => {
-      if (
-        categoryFilter !== "All" &&
-        t.assignee?.area?.categoriaId !== Number(categoryFilter)
-      ) {
-        return false;
-      }
-
-      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) {
-        return false;
-      }
-
-      if (
-        countryFilter !== "All" &&
-        t.assignee.country.id !== Number(countryFilter)
-      ) {
-        return false;
-      }
-
-      if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter) {
-        return false;
-      }
-
-      if (priorityFilter !== "All" && t.priority !== priorityFilter) {
-        return false;
-      }
-
-      if (statusFilter !== "All" && t.status !== statusFilter) {
-        return false;
-      }
-
-      if (dateRange.start) {
-        if (new Date(t.entryDate) < new Date(dateRange.start)) return false;
-      }
-
-      if (dateRange.end) {
-        if (new Date(t.entryDate) > new Date(dateRange.end)) return false;
-      }
-
-      return true;
-    });
+    return accessibleTickets.filter((ticket) => applyCommonFilters(ticket));
   }, [
     accessibleTickets,
     areaFilter,
@@ -285,8 +360,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
     return ticketAreas
       .map((area) => {
         const areaTickets = filteredTickets.filter(
-          (t) => t.assignee?.area?.name === area.name,
+          (t) => getTicketArea(t)?.name === area.name,
         );
+
         return {
           name: area.name,
           Finalizadas: areaTickets.filter(
@@ -302,52 +378,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       .filter((d) => d.Finalizadas > 0 || d.Pendientes > 0);
   }, [filteredTickets, ticketAreas]);
 
-  const pendingTasks = accessibleTickets
-    .filter((t) => {
-      if (
-        t.status === TicketStatus.RESOLVED ||
-        t.status === TicketStatus.CANCELLED
-      ) {
-        return false;
-      }
+  const pendingTasks = useMemo(() => {
+    return accessibleTickets
+      .filter((ticket) => {
+        if (
+          ticket.status === TicketStatus.RESOLVED ||
+          ticket.status === TicketStatus.CANCELLED
+        ) {
+          return false;
+        }
 
-      if (areaFilter !== "All" && t.assignee?.area?.name !== areaFilter) {
-        return false;
-      }
-
-      if (
-        categoryFilter !== "All" &&
-        t.assignee?.area?.category?.id !== Number(categoryFilter)
-      ) {
-        return false;
-      }
-
-      if (
-        countryFilter !== "All" &&
-        t.assignee?.country?.country_name !== countryFilter
-      ) {
-        return false;
-      }
-
-      if (responsibleFilter !== "All" && t.assigneeId !== responsibleFilter) {
-        return false;
-      }
-
-      if (priorityFilter !== "All" && t.priority !== priorityFilter) {
-        return false;
-      }
-
-      if (dateRange.start) {
-        if (new Date(t.entryDate) < new Date(dateRange.start)) return false;
-      }
-
-      if (dateRange.end) {
-        if (new Date(t.entryDate) > new Date(dateRange.end)) return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) => getDaysOverdue(b.dueDate) - getDaysOverdue(a.dueDate));
+        return applyCommonFilters(ticket);
+      })
+      .sort((a, b) => getDaysOverdue(b.dueDate) - getDaysOverdue(a.dueDate));
+  }, [
+    accessibleTickets,
+    areaFilter,
+    countryFilter,
+    responsibleFilter,
+    priorityFilter,
+    statusFilter,
+    dateRange,
+    categoryFilter,
+  ]);
 
   const allTasks = filteredTickets;
 
@@ -472,9 +525,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
                             </span>
                             <span>
                               - {action.action}{" "}
-                              <span className="text-xs italic">
-                                
-                              </span>
+                              <span className="text-xs italic"></span>
                             </span>
                           </li>
                         ))}
@@ -636,6 +687,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               <input
                 type="date"
                 className="w-full p-1 rounded text-gray-800 text-xs"
+                value={dateRange.start}
                 onChange={(e) =>
                   setDateRange({ ...dateRange, start: e.target.value })
                 }
@@ -643,6 +695,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
               <input
                 type="date"
                 className="w-full p-1 rounded text-gray-800 text-xs"
+                value={dateRange.end}
                 onChange={(e) =>
                   setDateRange({ ...dateRange, end: e.target.value })
                 }
@@ -766,59 +819,137 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         <TableContainer
           component={Paper}
           className="shadow-sm border border-gray-200 overflow-auto"
-          sx={{maxHeight:500}}
+          sx={{ maxHeight: 500 }}
         >
           <Table size="small" stickyHeader>
             <TableHead className="bg-[#e51b24]">
               <TableRow>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   ID Ticket
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   País
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Prioridad
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Área
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold px-2 max-w-xs truncate"
-                  sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Responsable
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold px-2 max-w-xs truncate"
-                  sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Descripción
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Ingreso
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Entrega
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Estado
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold"
                   align="center"
-                  sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Días Atraso
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#e51b24", color: "#fff", fontWeight: 700 }}/>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#e51b24",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                />
               </TableRow>
             </TableHead>
 
-            <TableBody>{pendingTasks.map((t) => renderTicketRow(t, false))}</TableBody>
+            <TableBody>
+              {pendingTasks.map((t) => renderTicketRow(t, false))}
+            </TableBody>
           </Table>
         </TableContainer>
       </div>
@@ -834,66 +965,148 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
         <TableContainer
           component={Paper}
           className="shadow-sm border border-gray-200 overflow-x-auto"
-          sx={{maxHeight:500}}
+          sx={{ maxHeight: 500 }}
         >
           <Table size="small" stickyHeader>
-            <TableHead >
+            <TableHead>
               <TableRow>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   ID Ticket
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   País
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Prioridad
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold"sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Área
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold max-w-xs truncate"
-                  sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Responsable
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold max-w-xs truncate"
-                  sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Descripción
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold"
-                sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Ingreso
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold"
-                sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Entrega
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold"
-                sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Realización
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold"
-                sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}>
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
                   Estado
                 </TableCell>
                 <TableCell
                   component="th"
                   className="text-white font-bold"
-                  align="center"  
-                  sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }}
+                  align="center"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
                 >
                   Días Atraso
                 </TableCell>
-                <TableCell component="th" className="text-white font-bold" sx={{ backgroundColor: "#1f1d1e", color: "#fff", fontWeight: 700 }} />
+                <TableCell
+                  component="th"
+                  className="text-white font-bold"
+                  sx={{
+                    backgroundColor: "#1f1d1e",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                />
               </TableRow>
             </TableHead>
 
-            <TableBody>{allTasks.map((t) => renderTicketRow(t, true))}</TableBody>
+            <TableBody>
+              {allTasks.map((t) => renderTicketRow(t, true))}
+            </TableBody>
           </Table>
         </TableContainer>
       </div>
