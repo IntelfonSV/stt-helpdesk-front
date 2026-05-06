@@ -128,6 +128,60 @@ const getCurrentUserCountryId = (
   return currentUser.country;
 };
 
+const formatElapsedTime = (
+  entryDate?: string | null,
+  completionDate?: string | null,
+) => {
+  if (!entryDate) {
+    return "Sin fecha de ingreso";
+  }
+
+  const start = new Date(entryDate);
+  const end = completionDate ? new Date(completionDate) : new Date();
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "Fecha inválida";
+  }
+
+  if (end.getTime() < start.getTime()) {
+    return "Fecha inválida";
+  }
+
+  const diffMs = end.getTime() - start.getTime();
+  const totalMinutes = Math.floor(diffMs / 60000);
+
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  return `${minutes}m`;
+};
+
+const getElapsedTimeLabel = (ticket: Ticket) => {
+  const elapsed = formatElapsedTime(ticket.entryDate, ticket.completionDate);
+
+  if (ticket.completionDate) {
+    return elapsed;
+  }
+
+  if (
+    ticket.status === TicketStatus.RESOLVED ||
+    ticket.status === TicketStatus.CANCELLED
+  ) {
+    return "Sin cierre";
+  }
+
+  return `En curso: ${elapsed}`;
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const navigate = useNavigate();
 
@@ -405,7 +459,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const allTasks = filteredTickets;
 
   const renderTicketRow = (ticket: Ticket, showCompletion: boolean) => {
-    const daysOverdue = getDaysOverdue(ticket.dueDate, ticket.completionDate);
+    const elapsedTime = getElapsedTimeLabel(ticket);
     const isExpanded = expandedTicket === ticket.id;
 
     return (
@@ -457,10 +511,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
           <TableCell align="center">
             <span
               className={`font-bold ${
-                daysOverdue > 0 ? "text-[#e51b24]" : "text-green-600"
+                ticket.completionDate
+                  ? "text-green-600"
+                  : ticket.status === TicketStatus.RESOLVED ||
+                      ticket.status === TicketStatus.CANCELLED
+                    ? "text-gray-500"
+                    : "text-[#e51b24]"
               }`}
             >
-              {daysOverdue}
+              {elapsedTime}
             </span>
           </TableCell>
           <TableCell>
@@ -933,7 +992,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
                     fontWeight: 700,
                   }}
                 >
-                  Días Atraso
+                  Tiempo Transcurrido
                 </TableCell>
                 <TableCell
                   component="th"
@@ -1090,7 +1149,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
                     fontWeight: 700,
                   }}
                 >
-                  Días Atraso
+                  Tiempo Transcurrido
                 </TableCell>
                 <TableCell
                   component="th"
