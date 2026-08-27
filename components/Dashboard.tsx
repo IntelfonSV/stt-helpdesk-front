@@ -191,10 +191,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   const [priorityFilter, setPriorityFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [periodPreset, setPeriodPreset] = useState<string>("currentMonth");
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
-    start: "",
-    end: "",
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10),
   });
+
+  const getMonthRange = (offset: number = 0) => {
+    const now = new Date();
+    const year = now.getFullYear() + Math.floor((now.getMonth() + offset) / 12);
+    const month = (now.getMonth() + offset) % 12;
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0);
+    return {
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    };
+  };
+
+  const getLast30DaysRange = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return {
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    };
+  };
+
+  const handlePeriodPresetChange = (preset: string) => {
+    setPeriodPreset(preset);
+    if (preset === "currentMonth") {
+      setDateRange(getMonthRange(0));
+    } else if (preset === "lastMonth") {
+      setDateRange(getMonthRange(-1));
+    } else if (preset === "last30days") {
+      setDateRange(getLast30DaysRange());
+    }
+  };
+
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -362,9 +397,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
   ]);
 
   const stats: KPIStats = useMemo(() => {
-    const finished = filteredTickets.filter(
-      (t) => t.status === TicketStatus.RESOLVED,
-    ).length;
+    const isMonthlyPreset = periodPreset === "currentMonth" || periodPreset === "lastMonth";
+
+    let finished: number;
+    let asignadas: number;
+
+    if (isMonthlyPreset && dateRange.start && dateRange.end) {
+      const monthStart = new Date(dateRange.start);
+      const monthEnd = new Date(dateRange.end);
+      monthEnd.setHours(23, 59, 59, 999);
+
+      const ticketsWithDueInMonth = filteredTickets.filter((t) => {
+        const dueDate = new Date(t.dueDate);
+        return dueDate >= monthStart && dueDate <= monthEnd;
+      });
+
+      asignadas = ticketsWithDueInMonth.length;
+
+      finished = ticketsWithDueInMonth.filter(
+        (t) => t.status === TicketStatus.RESOLVED,
+      ).length;
+    } else {
+      finished = filteredTickets.filter(
+        (t) => t.status === TicketStatus.RESOLVED,
+      ).length;
+
+      asignadas = filteredTickets.filter(
+        (t) =>
+          t.status !== TicketStatus.CANCELLED &&
+          t.status !== TicketStatus.WAITING &&
+          (t.status === TicketStatus.RESOLVED || getDaysOverdue(t.dueDate) > 0),
+      ).length;
+    }
 
     const unfinished = filteredTickets.filter(
       (t) =>
@@ -378,12 +442,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
 
     const onHold = filteredTickets.filter(
       (t) => t.status === TicketStatus.WAITING,
-    ).length;
-
-    const asignadas = filteredTickets.filter(
-      (t) =>
-        t.status !== TicketStatus.CANCELLED &&
-        t.status !== TicketStatus.WAITING,
     ).length;
 
     const overdue = filteredTickets.filter((t) => {
@@ -408,7 +466,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
       onHold,
       overdue,
     };
-  }, [filteredTickets]);
+  }, [filteredTickets, periodPreset, dateRange]);
 
   const areaChartData = useMemo(() => {
     return ticketAreas
@@ -741,23 +799,71 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser }) => {
             </TextField>
           </Grid>
 
-          <Grid item={true} xs={12} md={2}>
+          <Grid item={true} xs={12} md={3}>
             <div className="flex flex-col gap-1">
+              <div className="flex gap-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => handlePeriodPresetChange("currentMonth")}
+                  className={`px-2 py-1 text-xs rounded ${
+                    periodPreset === "currentMonth"
+                      ? "bg-[#1e242b] text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Mes Actual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodPresetChange("lastMonth")}
+                  className={`px-2 py-1 text-xs rounded ${
+                    periodPreset === "lastMonth"
+                      ? "bg-[#1e242b] text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Mes Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodPresetChange("last30days")}
+                  className={`px-2 py-1 text-xs rounded ${
+                    periodPreset === "last30days"
+                      ? "bg-[#1e242b] text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Últimos 30 días
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePeriodPresetChange("custom")}
+                  className={`px-2 py-1 text-xs rounded ${
+                    periodPreset === "custom"
+                      ? "bg-[#1e242b] text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                >
+                  Personalizado
+                </button>
+              </div>
               <input
                 type="date"
                 className="w-full p-1 rounded text-gray-800 text-xs"
                 value={dateRange.start}
-                onChange={(e) =>
-                  setDateRange({ ...dateRange, start: e.target.value })
-                }
+                onChange={(e) => {
+                  setPeriodPreset("custom");
+                  setDateRange({ ...dateRange, start: e.target.value });
+                }}
               />
               <input
                 type="date"
                 className="w-full p-1 rounded text-gray-800 text-xs"
                 value={dateRange.end}
-                onChange={(e) =>
-                  setDateRange({ ...dateRange, end: e.target.value })
-                }
+                onChange={(e) => {
+                  setPeriodPreset("custom");
+                  setDateRange({ ...dateRange, end: e.target.value });
+                }}
               />
             </div>
           </Grid>
