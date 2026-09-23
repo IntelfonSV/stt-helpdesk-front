@@ -3,7 +3,7 @@ import React from 'react';
 
 export const Logo: React.FC<{ variant?: 'light' | 'dark'; className?: string }> = ({ variant = 'dark', className = '' }) => {
   // The official logo URL
-  const logoUrl = "https://grupostt.com/wp-content/uploads/2025/06/LogoSTT.png";
+  const logoUrl = "https://grupostt.com/wp-content/uploads/2026/08/cropped-LogoSTT.png";
   
   return (
     <div className={`flex items-center gap-2 select-none ${className}`}>
